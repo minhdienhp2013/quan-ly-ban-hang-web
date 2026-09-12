@@ -61,7 +61,12 @@ export function subscribeProducts(
 
       const raw = snapshot.val() as Record<string, Product>;
       const products = Object.entries(raw)
-        .map(([key, product]) => ({ ...product, id: product.id || key }))
+        .map(([key, product]) => ({
+          ...product,
+          id: product.id || key,
+          stockQuantity: Number(product.stockQuantity) || 0,
+          stockVersion: Number(product.stockVersion) || 0,
+        }))
         .sort((a, b) => {
           if (a.active !== b.active) return a.active ? -1 : 1;
           return a.name.localeCompare(b.name, 'vi');
@@ -90,6 +95,7 @@ export async function createProduct(input: ProductInput, actorUid: string): Prom
     costPrice: Math.round(input.costPrice),
     salePrice: Math.round(input.salePrice),
     stockQuantity: 0,
+    stockVersion: 0,
     active: input.active,
     createdAt: now,
     updatedAt: now,
@@ -129,6 +135,9 @@ export async function updateProduct(
   }
 
   const now = Date.now();
+  const barcode = cleanOptional(input.barcode);
+  const qrCode = cleanOptional(input.qrCode);
+  const unit = cleanOptional(input.unit);
   const product: Product = {
     id: existing.id,
     sku: input.sku.trim(),
@@ -136,13 +145,14 @@ export async function updateProduct(
     costPrice: Math.round(input.costPrice),
     salePrice: Math.round(input.salePrice),
     stockQuantity: existing.stockQuantity,
+    stockVersion: Number(existing.stockVersion) || 0,
     active: input.active,
     createdAt: existing.createdAt,
     updatedAt: now,
     ...(existing.categoryId ? { categoryId: existing.categoryId } : {}),
-    ...(cleanOptional(input.barcode) ? { barcode: cleanOptional(input.barcode) } : {}),
-    ...(cleanOptional(input.qrCode) ? { qrCode: cleanOptional(input.qrCode) } : {}),
-    ...(cleanOptional(input.unit) ? { unit: cleanOptional(input.unit) } : {}),
+    ...(barcode ? { barcode } : {}),
+    ...(qrCode ? { qrCode } : {}),
+    ...(unit ? { unit } : {}),
     ...(typeof input.minStock === 'number' ? { minStock: input.minStock } : {}),
   };
 
@@ -155,8 +165,19 @@ export async function updateProduct(
     now,
   );
 
+  // Chỉ cập nhật metadata. Không ghi lại stockQuantity/stockVersion từ state UI cũ,
+  // vì tồn kho có thể vừa thay đổi trên một thiết bị khác.
   await update(ref(database), {
-    [`products/${existing.id}`]: product,
+    [`products/${existing.id}/sku`]: product.sku,
+    [`products/${existing.id}/name`]: product.name,
+    [`products/${existing.id}/costPrice`]: product.costPrice,
+    [`products/${existing.id}/salePrice`]: product.salePrice,
+    [`products/${existing.id}/active`]: product.active,
+    [`products/${existing.id}/updatedAt`]: now,
+    [`products/${existing.id}/barcode`]: barcode ?? null,
+    [`products/${existing.id}/qrCode`]: qrCode ?? null,
+    [`products/${existing.id}/unit`]: unit ?? null,
+    [`products/${existing.id}/minStock`]: typeof input.minStock === 'number' ? input.minStock : null,
     [`auditLogs/${auditKey}`]: auditLog,
   });
 
