@@ -1,7 +1,7 @@
 import { get, onValue, push, ref, type Unsubscribe } from 'firebase/database';
 import { db } from '../../firebase/client';
 import type { StockOut, StockOutItem, StockOutReason } from '../../types/models';
-import { commitStockOperation, hasReferenceMovement } from '../inventory/inventoryService';
+import { commitStockOperation } from '../inventory/inventoryService';
 
 export interface StockOutLineInput { productId: string; quantity: number; }
 export interface CreateStockOutInput { reason: StockOutReason; note?: string; items: StockOutLineInput[]; }
@@ -87,7 +87,6 @@ export async function cancelStockOut(stockOutId: string, actorUid: string): Prom
   if (!snapshot.exists()) throw new Error('Không tìm thấy phiếu xuất.');
   const stockOut = snapshot.val() as StockOut;
   if (stockOut.status === 'cancelled') return;
-  if (await hasReferenceMovement(stockOutId, 'STOCK_OUT_REVERSAL')) return;
   const now = Date.now();
 
   await commitStockOperation({
