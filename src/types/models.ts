@@ -233,9 +233,38 @@ export interface StoreSettings {
   updatedAt: number;
 }
 
+export interface AuditLog {
+  id: string;
+  actorUid: string;
+  action: string;
+  entityType: string;
+  entityId?: string;
+  summary?: string;
+  createdAt: number;
+}
+
+export interface BackupSourceMetadata {
+  projectId: string;
+  databaseUrl: string;
+}
+
+export type RestoreMode = 'merge' | 'replace';
+
+export interface RestoreSession {
+  id: string;
+  actorUid: string;
+  mode: RestoreMode;
+  schemaVersion: 2;
+  sourceProjectId: string;
+  sourceExportedAt: number;
+  createdAt: number;
+  expiresAt: number;
+}
+
 export interface BackupEnvelope {
-  schemaVersion: 1;
+  schemaVersion: 2;
   exportedAt: number;
+  source: BackupSourceMetadata;
   data: {
     products?: Record<string, Product>;
     categories?: Record<string, Category>;
@@ -249,15 +278,6 @@ export interface BackupEnvelope {
     stocktakes?: Record<string, Stocktake>;
     expenses?: Record<string, Expense>;
     settings?: StoreSettings;
+    auditLogs?: Record<string, AuditLog>;
   };
-}
-
-export interface AuditLog {
-  id: string;
-  actorUid: string;
-  action: string;
-  entityType: string;
-  entityId?: string;
-  summary?: string;
-  createdAt: number;
 }
