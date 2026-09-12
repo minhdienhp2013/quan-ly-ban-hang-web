@@ -1,0 +1,128 @@
+.excel-import-entry {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 18px;
+  padding: 16px 18px;
+  border: 1px solid #dfe5ed;
+  border-radius: 14px;
+  background: #ffffff;
+}
+
+.excel-import-entry > div {
+  display: grid;
+  gap: 4px;
+}
+
+.excel-import-entry span,
+.excel-import-help span,
+.excel-file-picker span {
+  color: #687386;
+  line-height: 1.5;
+}
+
+.excel-import-panel {
+  margin-bottom: 24px;
+}
+
+.excel-import-help {
+  display: grid;
+  gap: 5px;
+  margin-bottom: 18px;
+  padding: 14px 16px;
+  border-radius: 10px;
+  background: #f6f8fb;
+}
+
+.excel-file-picker {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 14px;
+  font-weight: 700;
+}
+
+.excel-file-picker input {
+  width: 100%;
+  padding: 12px;
+  border: 1px dashed #b8c3d1;
+  border-radius: 10px;
+  background: #ffffff;
+}
+
+.import-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin: 18px 0;
+}
+
+.import-summary div {
+  display: grid;
+  gap: 3px;
+  padding: 14px;
+  border: 1px solid #e1e6ed;
+  border-radius: 10px;
+  background: #ffffff;
+}
+
+.import-summary span {
+  color: #718095;
+  font-size: 0.84rem;
+}
+
+.import-summary strong {
+  font-size: 1.4rem;
+}
+
+.form-success,
+.form-warning {
+  margin: 12px 0;
+  padding: 12px 14px;
+  border-radius: 10px;
+  line-height: 1.5;
+}
+
+.form-success {
+  color: #1c6438;
+  background: #eaf8ef;
+}
+
+.form-warning {
+  color: #7a5a13;
+  background: #fff6dd;
+}
+
+.import-preview-table-wrap {
+  max-height: 460px;
+  overflow: auto;
+}
+
+.import-status {
+  display: inline-block;
+  max-width: 320px;
+  line-height: 1.4;
+}
+
+.import-status--ready {
+  color: #1c6438;
+}
+
+.import-status--duplicate {
+  color: #8a6114;
+}
+
+.import-status--error {
+  color: #9a3030;
+}
+
+@media (max-width: 760px) {
+  .excel-import-entry {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .import-summary {
+    grid-template-columns: 1fr;
+  }
+}
