@@ -5,6 +5,7 @@ import { RequireOwner } from './auth/RequireOwner';
 import AppLayout from './layout/AppLayout';
 import ProductsWorkspacePage from './modules/products/ProductsWorkspacePage';
 import './modules/products/products.css';
+import QrPrintingPage from './modules/qr/QrPrintingPage';
 import DashboardPage from './pages/DashboardPage';
 import LoginPage from './pages/LoginPage';
 import ModulePlaceholderPage from './pages/ModulePlaceholderPage';
@@ -14,7 +15,6 @@ const modulePages = {
   purchases: ['Nhập hàng', 'Tạo phiếu nhập, cập nhật giá vốn và tăng tồn kho.'],
   inventory: ['Kho', 'Theo dõi tồn kho và nhật ký biến động hàng hóa.'],
   stocktakes: ['Kiểm kê', 'Kiểm kê thực tế, chênh lệch và điều chỉnh tồn kho có truy vết.'],
-  'qr-printing': ['QR & In tem', 'Quét QR bằng camera, tạo mã và in tem trên trình duyệt.'],
   reports: ['Báo cáo', 'Doanh thu, giá vốn, lợi nhuận và báo cáo tồn kho theo thời gian.'],
   users: ['Người dùng', 'Quản lý nhân viên, trạng thái tài khoản và quyền truy cập.'],
   settings: ['Cài đặt', 'Thông tin cửa hàng và cấu hình mặc định của hệ thống.'],
@@ -47,10 +47,7 @@ export default function App() {
                 path="stocktakes"
                 element={<ModulePlaceholderPage title={modulePages.stocktakes[0]} description={modulePages.stocktakes[1]} />}
               />
-              <Route
-                path="qr-printing"
-                element={<ModulePlaceholderPage title={modulePages['qr-printing'][0]} description={modulePages['qr-printing'][1]} />}
-              />
+              <Route path="qr-printing" element={<QrPrintingPage />} />
               <Route
                 path="reports"
                 element={<ModulePlaceholderPage title={modulePages.reports[0]} description={modulePages.reports[1]} />}
