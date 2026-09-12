@@ -1,0 +1,48 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+    "users": {
+      "$uid": {
+        ".read": "auth != null && (auth.uid === $uid || (root.child('users').child(auth.uid).child('active').val() === true && root.child('users').child(auth.uid).child('role').val() === 'owner'))",
+        ".write": "auth != null && ((auth.uid === 'GFJo0PH7VNYkoI3Fjgr2ytnjq9t1' && $uid === auth.uid) || (root.child('users').child(auth.uid).child('active').val() === true && root.child('users').child(auth.uid).child('role').val() === 'owner'))",
+        ".validate": "newData.exists() && newData.hasChildren(['uid', 'displayName', 'role', 'active', 'createdAt', 'updatedAt']) && newData.child('uid').val() === $uid && newData.child('displayName').isString() && newData.child('active').isBoolean() && newData.child('createdAt').isNumber() && newData.child('updatedAt').isNumber() && (($uid === 'GFJo0PH7VNYkoI3Fjgr2ytnjq9t1' && newData.child('role').val() === 'owner') || ($uid !== 'GFJo0PH7VNYkoI3Fjgr2ytnjq9t1' && newData.child('role').val() === 'staff'))"
+      }
+    },
+    "products": {
+      ".read": "auth != null && root.child('users').child(auth.uid).child('active').val() === true",
+      ".write": "auth != null && root.child('users').child(auth.uid).child('active').val() === true"
+    },
+    "categories": {
+      ".read": "auth != null && root.child('users').child(auth.uid).child('active').val() === true",
+      ".write": "auth != null && root.child('users').child(auth.uid).child('active').val() === true"
+    },
+    "sales": {
+      ".read": "auth != null && root.child('users').child(auth.uid).child('active').val() === true",
+      ".write": "auth != null && root.child('users').child(auth.uid).child('active').val() === true"
+    },
+    "purchases": {
+      ".read": "auth != null && root.child('users').child(auth.uid).child('active').val() === true",
+      ".write": "auth != null && root.child('users').child(auth.uid).child('active').val() === true"
+    },
+    "stockMovements": {
+      ".read": "auth != null && root.child('users').child(auth.uid).child('active').val() === true",
+      ".write": "auth != null && root.child('users').child(auth.uid).child('active').val() === true"
+    },
+    "stocktakes": {
+      ".read": "auth != null && root.child('users').child(auth.uid).child('active').val() === true",
+      ".write": "auth != null && root.child('users').child(auth.uid).child('active').val() === true"
+    },
+    "settings": {
+      ".read": "auth != null && root.child('users').child(auth.uid).child('active').val() === true",
+      ".write": "auth != null && root.child('users').child(auth.uid).child('active').val() === true && root.child('users').child(auth.uid).child('role').val() === 'owner'"
+    },
+    "auditLogs": {
+      ".read": "auth != null && root.child('users').child(auth.uid).child('active').val() === true && root.child('users').child(auth.uid).child('role').val() === 'owner'",
+      "$logId": {
+        ".write": "auth != null && root.child('users').child(auth.uid).child('active').val() === true && !data.exists() && newData.exists() && newData.child('actorUid').val() === auth.uid",
+        ".validate": "newData.hasChildren(['id', 'actorUid', 'action', 'entityType', 'createdAt']) && newData.child('id').val() === $logId && newData.child('actorUid').val() === auth.uid && newData.child('action').isString() && newData.child('entityType').isString() && newData.child('createdAt').isNumber()"
+      }
+    }
+  }
+}
