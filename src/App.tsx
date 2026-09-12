@@ -4,6 +4,7 @@ import { RequireAuth } from './auth/RequireAuth';
 import { RequireOwner } from './auth/RequireOwner';
 import AppLayout from './layout/AppLayout';
 import ProductsPage from './modules/products/ProductsPage';
+import './modules/products/products.css';
 import DashboardPage from './pages/DashboardPage';
 import LoginPage from './pages/LoginPage';
 import ModulePlaceholderPage from './pages/ModulePlaceholderPage';
