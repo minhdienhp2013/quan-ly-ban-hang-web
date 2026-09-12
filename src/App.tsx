@@ -3,12 +3,13 @@ import { AuthProvider } from './auth/AuthContext';
 import { RequireAuth } from './auth/RequireAuth';
 import { RequireOwner } from './auth/RequireOwner';
 import AppLayout from './layout/AppLayout';
+import ProductsPage from './modules/products/ProductsPage';
+import './modules/products/products.css';
 import DashboardPage from './pages/DashboardPage';
 import LoginPage from './pages/LoginPage';
 import ModulePlaceholderPage from './pages/ModulePlaceholderPage';
 
 const modulePages = {
-  products: ['Sản phẩm', 'Quản lý sản phẩm, danh mục, mã SKU, barcode/QR, giá và trạng thái.'],
   sales: ['Bán hàng', 'Màn hình POS, giỏ hàng, thanh toán và lịch sử đơn bán.'],
   purchases: ['Nhập hàng', 'Tạo phiếu nhập, cập nhật giá vốn và tăng tồn kho.'],
   inventory: ['Kho', 'Theo dõi tồn kho và nhật ký biến động hàng hóa.'],
@@ -29,10 +30,7 @@ export default function App() {
           <Route element={<RequireAuth />}>
             <Route element={<AppLayout />}>
               <Route index element={<DashboardPage />} />
-              <Route
-                path="products"
-                element={<ModulePlaceholderPage title={modulePages.products[0]} description={modulePages.products[1]} />}
-              />
+              <Route path="products" element={<ProductsPage />} />
               <Route
                 path="sales"
                 element={<ModulePlaceholderPage title={modulePages.sales[0]} description={modulePages.sales[1]} />}
