@@ -31,7 +31,7 @@ Tài liệu này dùng để AI trung tâm phân việc cho các AI/đoạn chat
 | PROD-001 | Danh sách sản phẩm | `products` | DONE | PR #3, realtime list, CI xanh |
 | PROD-002 | Thêm/sửa sản phẩm | `products` | DONE | PR #3, audit log, soft disable |
 | PROD-003 | Tìm theo SKU/barcode/QR | `products` | DONE | PR #3, tìm theo tên/SKU/barcode/QR |
-| PROD-004 | Import danh sách sản phẩm từ Excel | `excel`, `products` | IN_PROGRESS | Import linh hoạt, xem trước, kiểm tra trùng/lỗi trước khi ghi Firebase |
+| PROD-004 | Import danh sách sản phẩm từ Excel | `excel`, `products` | DONE | PR #4, import linh hoạt, preview, kiểm tra trùng/lỗi, CI xanh |
 
 ## Giai đoạn 2 — Kho
 
@@ -93,7 +93,7 @@ AI module phải báo lại các file đã thay đổi, quyết định kỹ thu
 
 ## Việc ưu tiên tiếp theo
 
-1. Hoàn thiện `PROD-004`, chạy CI và merge.
-2. `INV-001` + `INV-002`: màn hình tồn kho và stock movement service.
-3. Sau đó triển khai Nhập hàng và Bán hàng.
+1. `INV-001` + `INV-002`: màn hình tồn kho và stock movement service.
+2. Sau đó triển khai Nhập hàng.
+3. Tiếp theo triển khai Bán hàng/POS.
 4. Khi người dùng sẵn sàng chạy website/local app, kiểm tra bootstrap owner và đóng `AUTH-002`.
