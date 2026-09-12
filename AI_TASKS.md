@@ -22,7 +22,7 @@ Tài liệu này dùng để AI trung tâm phân việc cho các AI/đoạn chat
 | CORE-006 | Routing/layout responsive | DONE | PR #2 |
 | CORE-007 | Shared types | DONE | PR #2 |
 | AUTH-001 | Email/Password Auth | DONE | PR #2 |
-| AUTH-002 | Owner/staff + rules | REVIEW | Rules đã Publish; còn smoke test owner trên app chạy thật/local |
+| AUTH-002 | Owner/staff + rules | REVIEW | Còn smoke test owner trên app chạy thật/local |
 
 ## Giai đoạn 1 — Sản phẩm
 
@@ -32,7 +32,7 @@ Tài liệu này dùng để AI trung tâm phân việc cho các AI/đoạn chat
 | PROD-002 | Thêm/sửa/ngừng sử dụng | DONE | PR #3 |
 | PROD-003 | Tìm SKU/barcode/QR | DONE | PR #3 |
 | PROD-004 | Import Excel sản phẩm | DONE | PR #4, preview/trùng/lỗi |
-| PROD-005 | Danh mục sản phẩm | TODO | Có thể làm sau inventory core |
+| PROD-005 | Danh mục sản phẩm | TODO | Có thể bổ sung sau vòng QA nếu cần |
 
 ## Giai đoạn 2 — Kho, nhập, xuất, kiểm kê
 
@@ -50,53 +50,53 @@ Tài liệu này dùng để AI trung tâm phân việc cho các AI/đoạn chat
 
 ## Giai đoạn 3 — CRM và chi phí
 
-| ID | Công việc | Trạng thái |
-|---|---|---|
-| CUST-001 | Danh sách/thêm/sửa khách hàng | TODO |
-| CUST-002 | Tìm kiếm khách hàng | TODO |
-| SUP-001 | Danh sách/thêm/sửa nhà cung cấp | TODO |
-| SUP-002 | Tìm kiếm nhà cung cấp | TODO |
-| EXP-001 | Danh mục và ghi nhận chi phí | TODO |
-| EXP-002 | Hủy/sửa chi phí có audit | TODO |
+| ID | Công việc | Trạng thái | Ghi chú |
+|---|---|---|---|
+| CUST-001 | Danh sách/thêm/sửa khách hàng | DONE | PR #6 |
+| CUST-002 | Tìm kiếm khách hàng | DONE | PR #6 |
+| SUP-001 | Danh sách/thêm/sửa nhà cung cấp | DONE | PR #6 |
+| SUP-002 | Tìm kiếm nhà cung cấp | DONE | PR #6 |
+| EXP-001 | Danh mục và ghi nhận chi phí | DONE | PR #6 |
+| EXP-002 | Hủy/sửa chi phí có audit | DONE | PR #6 |
 
 ## Giai đoạn 4 — Bán hàng/POS
 
-Inventory core đã merge vào `main` qua PR #5. `SALE-001`, `SALE-002`, `SALE-004`, `SALE-005`, `SALE-006` được phép bắt đầu. `SALE-003` tích hợp khách hàng hoàn chỉnh sau khi CRM merge nếu PR CRM chưa vào `main` tại thời điểm bắt đầu.
-
-| ID | Công việc | Trạng thái | Phụ thuộc |
+| ID | Công việc | Trạng thái | Ghi chú |
 |---|---|---|---|
-| SALE-001 | POS/giỏ hàng responsive | TODO | Products, INV-002 DONE |
-| SALE-002 | Tạo đơn + trừ tồn an toàn | TODO | INV-002 DONE |
-| SALE-003 | Chọn khách hàng/khách lẻ | TODO | CUST-001 |
-| SALE-004 | Thanh toán tiền mặt/chuyển khoản/khác | TODO | SALE-001 |
-| SALE-005 | Lịch sử đơn hàng | TODO | SALE-002 |
-| SALE-006 | Hủy/hoàn đơn + hoàn kho | TODO | SALE-002, INV-002 DONE |
+| SALE-001 | POS/giỏ hàng responsive | DONE | PR #9 |
+| SALE-002 | Tạo đơn + trừ tồn an toàn | DONE | PR #9, dùng INV-002 CAS/idempotency |
+| SALE-003 | Chọn khách hàng/khách lẻ | DONE | PR #9 + CRM PR #6 |
+| SALE-004 | Thanh toán tiền mặt/chuyển khoản/khác | DONE | PR #9 |
+| SALE-005 | Lịch sử đơn hàng | DONE | PR #9 |
+| SALE-006 | Hủy/hoàn đơn + hoàn kho | DONE | PR #9, `SALE_RETURN_{saleId}` |
 
 ## Giai đoạn 5 — QR, Barcode, In tem
 
-| ID | Công việc | Trạng thái |
-|---|---|---|
-| QR-001 | Quét QR bằng camera điện thoại | TODO |
-| QR-002 | Quét liên tục + chống quét trùng | TODO |
-| QR-003 | Tạo QR sản phẩm | TODO |
-| BAR-001 | Tạo barcode CODE128/EAN13 khi hợp lệ | TODO |
-| PRINT-001 | Tem 2 nhãn 74×22 mm | TODO |
-| PRINT-002 | Tem 2 nhãn 72×22 mm | TODO |
-| PRINT-003 | Tem 1 nhãn 50×30 mm | TODO |
-| PRINT-004 | Mẫu tem tùy chỉnh mm + print preview | TODO |
-| PRINT-005 | In tên/SP/SKU/barcode/QR/giá tùy chọn | TODO |
+| ID | Công việc | Trạng thái | Ghi chú |
+|---|---|---|---|
+| QR-001 | Quét QR bằng camera điện thoại | DONE | PR #7; smoke test thiết bị thật chuyển sang QA |
+| QR-002 | Quét liên tục + chống quét trùng | DONE | PR #7 |
+| QR-003 | Tạo QR sản phẩm | DONE | PR #7 |
+| BAR-001 | Tạo barcode CODE128/EAN13 khi hợp lệ | DONE | PR #7 |
+| PRINT-001 | Tem 2 nhãn 74×22 mm | DONE | PR #7 |
+| PRINT-002 | Tem 2 nhãn 72×22 mm | DONE | PR #7 |
+| PRINT-003 | Tem 1 nhãn 50×30 mm | DONE | PR #7 |
+| PRINT-004 | Mẫu tem tùy chỉnh mm + print preview | DONE | PR #7 |
+| PRINT-005 | In tên/SP/SKU/barcode/QR/giá tùy chọn | DONE | PR #7 |
 
 ## Giai đoạn 6 — Doanh thu, giá vốn, lợi nhuận, báo cáo
 
+Các dependency giao dịch chính đã merge vào `main`. Chat 5 được phép bắt đầu từ `main` mới nhất.
+
 | ID | Công việc | Trạng thái | Phụ thuộc |
 |---|---|---|---|
-| REP-001 | Doanh thu ngày/tuần/tháng/quý/năm | TODO | Sales |
-| REP-002 | Giá vốn theo snapshot đơn bán | TODO | Sales |
+| REP-001 | Doanh thu ngày/tuần/tháng/quý/năm | TODO | Sales DONE |
+| REP-002 | Giá vốn theo snapshot đơn bán | TODO | Sales DONE |
 | REP-003 | Lợi nhuận gộp | TODO | REP-001/002 |
-| REP-004 | Chi phí và lợi nhuận ròng | TODO | Expenses |
-| REP-005 | Báo cáo tồn kho | TODO | Inventory |
-| REP-006 | Báo cáo nhập/xuất | TODO | Purchases/StockOuts |
-| REP-007 | Báo cáo khách hàng/nhà cung cấp cơ bản | TODO | CRM |
+| REP-004 | Chi phí và lợi nhuận ròng | TODO | Expenses DONE |
+| REP-005 | Báo cáo tồn kho | TODO | Inventory DONE |
+| REP-006 | Báo cáo nhập/xuất | TODO | Purchases/StockOuts DONE |
+| REP-007 | Báo cáo khách hàng/nhà cung cấp cơ bản | TODO | CRM DONE |
 | REP-008 | Xuất báo cáo Excel | TODO | Reports |
 
 ## Giai đoạn 7 — Sao lưu, bảo mật, chất lượng
@@ -144,12 +144,10 @@ AI module không tự sửa `DATABASE_SCHEMA.md`, `PROJECT_RULES.md`, Firebase r
 
 ## Thứ tự ưu tiên
 
-### Có thể làm song song
-1. Chat CRM: `CUST`, `SUP`, `EXP`.
-2. Chat QR/In tem: `QR`, `BAR`, `PRINT`.
-3. Chat Bán hàng: `SALE-*` — đã được mở khóa sau khi PR #5 merge.
-
-### Sau khi giao dịch chính ổn định
-4. Chat Báo cáo/Backup/QA: `REP`, `BACK`, `SEC`, `QA`.
+1. Kho/nhập/xuất/kiểm kê: DONE.
+2. CRM/Expenses: DONE.
+3. QR/Barcode/In tem: DONE.
+4. Sales/POS: DONE.
+5. Chat Báo cáo/Backup/QA: được mở khóa, thực hiện `REP`, `BACK`, `SEC`, `QA` trên branch riêng từ `main` mới nhất.
 
 AI trung tâm giữ quyền review/merge và giải quyết xung đột giữa các PR.
