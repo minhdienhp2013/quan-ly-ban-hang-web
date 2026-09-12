@@ -15,10 +15,11 @@ const navigation: NavigationItem[] = [
   { to: '/sales', label: 'Bán hàng' },
   { to: '/purchases', label: 'Nhập hàng' },
   { to: '/inventory', label: 'Kho' },
+  { to: '/stockouts', label: 'Xuất kho' },
   { to: '/stocktakes', label: 'Kiểm kê' },
   { to: '/expenses', label: 'Chi phí', ownerOnly: true },
   { to: '/qr-printing', label: 'QR & In tem' },
-  { to: '/reports', label: 'Báo cáo' },
+  { to: '/reports', label: 'Báo cáo & Backup', ownerOnly: true },
   { to: '/users', label: 'Người dùng', ownerOnly: true },
   { to: '/settings', label: 'Cài đặt', ownerOnly: true },
 ];

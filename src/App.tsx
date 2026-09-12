@@ -5,20 +5,21 @@ import { RequireOwner } from './auth/RequireOwner';
 import AppLayout from './layout/AppLayout';
 import CustomersPage from './modules/customers/CustomersPage';
 import ExpensesPage from './modules/expenses/ExpensesPage';
+import InventoryWorkspacePage from './modules/inventory/InventoryWorkspacePage';
 import ProductsWorkspacePage from './modules/products/ProductsWorkspacePage';
 import './modules/products/products.css';
+import PurchasesPage from './modules/purchases/PurchasesPage';
 import QrPrintingPage from './modules/qr/QrPrintingPage';
+import ReportsPage from './modules/reports/ReportsPage';
 import SalesPage from './modules/sales/SalesPage';
+import StockOutPage from './modules/stockout/StockOutPage';
+import StocktakePage from './modules/stocktake/StocktakePage';
 import SuppliersPage from './modules/suppliers/SuppliersPage';
 import DashboardPage from './pages/DashboardPage';
 import LoginPage from './pages/LoginPage';
 import ModulePlaceholderPage from './pages/ModulePlaceholderPage';
 
 const modulePages = {
-  purchases: ['Nhập hàng', 'Tạo phiếu nhập, cập nhật giá vốn và tăng tồn kho.'],
-  inventory: ['Kho', 'Theo dõi tồn kho và nhật ký biến động hàng hóa.'],
-  stocktakes: ['Kiểm kê', 'Kiểm kê thực tế, chênh lệch và điều chỉnh tồn kho có truy vết.'],
-  reports: ['Báo cáo', 'Doanh thu, giá vốn, lợi nhuận và báo cáo tồn kho theo thời gian.'],
   users: ['Người dùng', 'Quản lý nhân viên, trạng thái tài khoản và quyền truy cập.'],
   settings: ['Cài đặt', 'Thông tin cửa hàng và cấu hình mặc định của hệ thống.'],
 } as const;
@@ -37,34 +38,17 @@ export default function App() {
               <Route path="customers" element={<CustomersPage />} />
               <Route path="suppliers" element={<SuppliersPage />} />
               <Route path="sales" element={<SalesPage />} />
-              <Route
-                path="purchases"
-                element={<ModulePlaceholderPage title={modulePages.purchases[0]} description={modulePages.purchases[1]} />}
-              />
-              <Route
-                path="inventory"
-                element={<ModulePlaceholderPage title={modulePages.inventory[0]} description={modulePages.inventory[1]} />}
-              />
-              <Route
-                path="stocktakes"
-                element={<ModulePlaceholderPage title={modulePages.stocktakes[0]} description={modulePages.stocktakes[1]} />}
-              />
+              <Route path="purchases" element={<PurchasesPage />} />
+              <Route path="inventory" element={<InventoryWorkspacePage />} />
+              <Route path="stockouts" element={<StockOutPage />} />
+              <Route path="stocktakes" element={<StocktakePage />} />
               <Route path="qr-printing" element={<QrPrintingPage />} />
-              <Route
-                path="reports"
-                element={<ModulePlaceholderPage title={modulePages.reports[0]} description={modulePages.reports[1]} />}
-              />
 
               <Route element={<RequireOwner />}>
                 <Route path="expenses" element={<ExpensesPage />} />
-                <Route
-                  path="users"
-                  element={<ModulePlaceholderPage title={modulePages.users[0]} description={modulePages.users[1]} />}
-                />
-                <Route
-                  path="settings"
-                  element={<ModulePlaceholderPage title={modulePages.settings[0]} description={modulePages.settings[1]} />}
-                />
+                <Route path="reports" element={<ReportsPage />} />
+                <Route path="users" element={<ModulePlaceholderPage title={modulePages.users[0]} description={modulePages.users[1]} />} />
+                <Route path="settings" element={<ModulePlaceholderPage title={modulePages.settings[0]} description={modulePages.settings[1]} />} />
               </Route>
             </Route>
           </Route>
