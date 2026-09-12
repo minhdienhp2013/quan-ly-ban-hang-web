@@ -76,7 +76,7 @@ export async function createBackupEnvelope(): Promise<BackupEnvelope> {
       return;
     }
     if (key === 'settings') {
-      if (isPlainRecord(value)) data.settings = value as BackupData['settings'];
+      if (isPlainRecord(value)) data.settings = value as unknown as BackupData['settings'];
       return;
     }
     (data as Record<string, unknown>)[key] = isPlainRecord(value) ? value : {};
