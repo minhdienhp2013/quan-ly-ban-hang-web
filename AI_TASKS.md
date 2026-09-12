@@ -28,10 +28,10 @@ Tài liệu này dùng để AI trung tâm phân việc cho các AI/đoạn chat
 |---|---|---|---|---|
 | AUTH-001 | Đăng nhập Firebase Authentication | `auth` | DONE | Email/Password + protected routes, PR #2 |
 | AUTH-002 | Role owner/staff | `auth`, rules | REVIEW | Rules đã Publish; bootstrap owner sẽ kiểm tra khi website/local app được chạy |
-| PROD-001 | Danh sách sản phẩm | `products` | IN_PROGRESS | Nhánh `feature/products-core` |
-| PROD-002 | Thêm/sửa sản phẩm | `products` | IN_PROGRESS | Nhánh `feature/products-core` |
-| PROD-003 | Tìm theo SKU/barcode/QR | `products` | IN_PROGRESS | Nhánh `feature/products-core` |
-| PROD-004 | Import danh sách sản phẩm từ Excel | `excel`, `products` | TODO | Làm sau CRUD sản phẩm ổn định |
+| PROD-001 | Danh sách sản phẩm | `products` | DONE | PR #3, realtime list, CI xanh |
+| PROD-002 | Thêm/sửa sản phẩm | `products` | DONE | PR #3, audit log, soft disable |
+| PROD-003 | Tìm theo SKU/barcode/QR | `products` | DONE | PR #3, tìm theo tên/SKU/barcode/QR |
+| PROD-004 | Import danh sách sản phẩm từ Excel | `excel`, `products` | TODO | Việc tiếp theo |
 
 ## Giai đoạn 2 — Kho
 
@@ -93,7 +93,7 @@ AI module phải báo lại các file đã thay đổi, quyết định kỹ thu
 
 ## Việc ưu tiên tiếp theo
 
-1. Hoàn thành `PROD-001`, `PROD-002`, `PROD-003`.
-2. CI/review/merge module Products.
-3. Sau đó làm `PROD-004` import Excel và bắt đầu Inventory.
+1. `PROD-004`: import danh sách sản phẩm từ Excel.
+2. `INV-001` + `INV-002`: màn hình tồn kho và stock movement service.
+3. Sau đó triển khai Nhập hàng và Bán hàng.
 4. Khi người dùng sẵn sàng chạy website/local app, kiểm tra bootstrap owner và đóng `AUTH-002`.
