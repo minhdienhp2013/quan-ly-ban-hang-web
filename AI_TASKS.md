@@ -19,15 +19,15 @@ Tài liệu này dùng để AI trung tâm phân việc cho các AI/đoạn chat
 | CORE-003 | Xác lập schema Firebase ban đầu | Docs | DONE | `DATABASE_SCHEMA.md` |
 | CORE-004 | Tạo bộ khung React + TypeScript + Vite | Core | DONE | PR #1, CI build thành công |
 | CORE-005 | Cấu hình Firebase Web qua env | Core | DONE | Firebase App/Auth + Realtime Database URL đã xác nhận |
-| CORE-006 | Tạo routing/layout chung | Core/UI | REVIEW | Desktop + mobile, chờ CI/merge |
-| CORE-007 | Thiết lập types dùng chung | Core | REVIEW | Bám `DATABASE_SCHEMA.md`, chờ CI/merge |
+| CORE-006 | Tạo routing/layout chung | Core/UI | DONE | PR #2, responsive desktop + mobile, CI xanh |
+| CORE-007 | Thiết lập types dùng chung | Core | DONE | PR #2, bám `DATABASE_SCHEMA.md` |
 
 ## Giai đoạn 1 — Đăng nhập và sản phẩm
 
 | ID | Công việc | Phạm vi | Trạng thái | Ghi chú |
 |---|---|---|---|---|
-| AUTH-001 | Đăng nhập Firebase Authentication | `auth` | REVIEW | Email/Password + protected routes, chờ CI/merge |
-| AUTH-002 | Role owner/staff | `auth`, rules | REVIEW | Owner UID đã neo; rules đã có trong repo, còn bước deploy Rules lên Firebase |
+| AUTH-001 | Đăng nhập Firebase Authentication | `auth` | DONE | Email/Password + protected routes, PR #2 |
+| AUTH-002 | Role owner/staff | `auth`, rules | REVIEW | Code/rules đã merge; còn deploy Rules và bootstrap owner lần đầu |
 | PROD-001 | Danh sách sản phẩm | `products` | TODO | Bắt đầu sau khi auth/rules ổn định |
 | PROD-002 | Thêm/sửa sản phẩm | `products` | TODO | |
 | PROD-003 | Tìm theo SKU/barcode/QR | `products` | TODO | |
@@ -86,8 +86,8 @@ AI module phải báo lại các file đã thay đổi, quyết định kỹ thu
 
 ## Việc ưu tiên tiếp theo
 
-1. Chạy CI cho nhánh `feature/core-routing-types-auth`.
-2. Review/merge routing, shared types và auth.
-3. Deploy `database.rules.json` lên Firebase Realtime Database.
-4. Đăng nhập lần đầu bằng tài khoản owner để bootstrap `/users/{ownerUid}`.
-5. Sau khi auth/rules ổn định, bắt đầu `PROD-001` và `PROD-002`.
+1. Deploy `database.rules.json` lên Firebase Realtime Database.
+2. Đăng nhập lần đầu bằng tài khoản owner để bootstrap `/users/{ownerUid}`.
+3. Xác nhận owner truy cập thành công và Rules chặn người chưa được cấp quyền.
+4. Đánh dấu `AUTH-002` DONE.
+5. Bắt đầu `PROD-001` và `PROD-002`.
