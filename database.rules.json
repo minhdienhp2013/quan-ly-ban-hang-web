@@ -12,27 +12,52 @@
     },
     "products": {
       ".read": "auth != null && root.child('users').child(auth.uid).child('active').val() === true",
-      ".write": "auth != null && root.child('users').child(auth.uid).child('active').val() === true"
+      ".write": "auth != null && root.child('users').child(auth.uid).child('active').val() === true",
+      ".indexOn": ["sku", "barcode", "qrCode", "updatedAt"]
     },
     "categories": {
       ".read": "auth != null && root.child('users').child(auth.uid).child('active').val() === true",
       ".write": "auth != null && root.child('users').child(auth.uid).child('active').val() === true"
     },
+    "customers": {
+      ".read": "auth != null && root.child('users').child(auth.uid).child('active').val() === true",
+      ".write": "auth != null && root.child('users').child(auth.uid).child('active').val() === true",
+      ".indexOn": ["code", "phone", "name", "updatedAt"]
+    },
+    "suppliers": {
+      ".read": "auth != null && root.child('users').child(auth.uid).child('active').val() === true",
+      ".write": "auth != null && root.child('users').child(auth.uid).child('active').val() === true",
+      ".indexOn": ["code", "phone", "name", "updatedAt"]
+    },
     "sales": {
       ".read": "auth != null && root.child('users').child(auth.uid).child('active').val() === true",
-      ".write": "auth != null && root.child('users').child(auth.uid).child('active').val() === true"
+      ".write": "auth != null && root.child('users').child(auth.uid).child('active').val() === true",
+      ".indexOn": ["createdAt", "status", "customerId"]
     },
     "purchases": {
       ".read": "auth != null && root.child('users').child(auth.uid).child('active').val() === true",
-      ".write": "auth != null && root.child('users').child(auth.uid).child('active').val() === true"
+      ".write": "auth != null && root.child('users').child(auth.uid).child('active').val() === true",
+      ".indexOn": ["createdAt", "status", "supplierId"]
+    },
+    "stockOuts": {
+      ".read": "auth != null && root.child('users').child(auth.uid).child('active').val() === true",
+      ".write": "auth != null && root.child('users').child(auth.uid).child('active').val() === true",
+      ".indexOn": ["createdAt", "status", "reason"]
     },
     "stockMovements": {
       ".read": "auth != null && root.child('users').child(auth.uid).child('active').val() === true",
-      ".write": "auth != null && root.child('users').child(auth.uid).child('active').val() === true"
+      ".write": "auth != null && root.child('users').child(auth.uid).child('active').val() === true",
+      ".indexOn": ["createdAt", "productId", "type", "referenceId"]
     },
     "stocktakes": {
       ".read": "auth != null && root.child('users').child(auth.uid).child('active').val() === true",
-      ".write": "auth != null && root.child('users').child(auth.uid).child('active').val() === true"
+      ".write": "auth != null && root.child('users').child(auth.uid).child('active').val() === true",
+      ".indexOn": ["createdAt", "status"]
+    },
+    "expenses": {
+      ".read": "auth != null && root.child('users').child(auth.uid).child('active').val() === true && root.child('users').child(auth.uid).child('role').val() === 'owner'",
+      ".write": "auth != null && root.child('users').child(auth.uid).child('active').val() === true && root.child('users').child(auth.uid).child('role').val() === 'owner'",
+      ".indexOn": ["expenseDate", "status", "category"]
     },
     "settings": {
       ".read": "auth != null && root.child('users').child(auth.uid).child('active').val() === true",
@@ -40,6 +65,7 @@
     },
     "auditLogs": {
       ".read": "auth != null && root.child('users').child(auth.uid).child('active').val() === true && root.child('users').child(auth.uid).child('role').val() === 'owner'",
+      ".indexOn": ["createdAt", "actorUid", "entityType"],
       "$logId": {
         ".write": "auth != null && root.child('users').child(auth.uid).child('active').val() === true && !data.exists() && newData.exists() && newData.child('actorUid').val() === auth.uid",
         ".validate": "newData.hasChildren(['id', 'actorUid', 'action', 'entityType', 'createdAt']) && newData.child('id').val() === $logId && newData.child('actorUid').val() === auth.uid && newData.child('action').isString() && newData.child('entityType').isString() && newData.child('createdAt').isNumber()"
