@@ -3,7 +3,7 @@ import { AuthProvider } from './auth/AuthContext';
 import { RequireAuth } from './auth/RequireAuth';
 import { RequireOwner } from './auth/RequireOwner';
 import AppLayout from './layout/AppLayout';
-import ProductsPage from './modules/products/ProductsPage';
+import ProductsWorkspacePage from './modules/products/ProductsWorkspacePage';
 import './modules/products/products.css';
 import DashboardPage from './pages/DashboardPage';
 import LoginPage from './pages/LoginPage';
@@ -30,7 +30,7 @@ export default function App() {
           <Route element={<RequireAuth />}>
             <Route element={<AppLayout />}>
               <Route index element={<DashboardPage />} />
-              <Route path="products" element={<ProductsPage />} />
+              <Route path="products" element={<ProductsWorkspacePage />} />
               <Route
                 path="sales"
                 element={<ModulePlaceholderPage title={modulePages.sales[0]} description={modulePages.sales[1]} />}
