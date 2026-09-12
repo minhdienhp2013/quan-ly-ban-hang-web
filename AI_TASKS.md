@@ -22,7 +22,7 @@ Tài liệu này dùng để AI trung tâm phân việc cho các AI/đoạn chat
 | CORE-006 | Routing/layout responsive | DONE | PR #2 |
 | CORE-007 | Shared types | DONE | PR #2 |
 | AUTH-001 | Email/Password Auth | DONE | PR #2 |
-| AUTH-002 | Owner/staff + rules | REVIEW | Còn smoke test owner trên app chạy thật/local |
+| AUTH-002 | Owner/staff + rules | REVIEW | Còn smoke test owner/staff trên app chạy thật |
 
 ## Giai đoạn 1 — Sản phẩm
 
@@ -31,15 +31,15 @@ Tài liệu này dùng để AI trung tâm phân việc cho các AI/đoạn chat
 | PROD-001 | Danh sách sản phẩm realtime | DONE | PR #3 |
 | PROD-002 | Thêm/sửa/ngừng sử dụng | DONE | PR #3 |
 | PROD-003 | Tìm SKU/barcode/QR | DONE | PR #3 |
-| PROD-004 | Import Excel sản phẩm | DONE | PR #4, preview/trùng/lỗi |
+| PROD-004 | Import Excel sản phẩm | DONE | PR #4 |
 | PROD-005 | Danh mục sản phẩm | TODO | Có thể bổ sung sau vòng QA nếu cần |
 
 ## Giai đoạn 2 — Kho, nhập, xuất, kiểm kê
 
 | ID | Công việc | Trạng thái | Ghi chú |
 |---|---|---|---|
-| INV-001 | Màn hình tồn kho | DONE | PR #5, realtime + responsive |
-| INV-002 | Stock movement service + concurrency | DONE | PR #5; CAS `stockVersion` + `stockOperations` receipt; CI #109 xanh |
+| INV-001 | Màn hình tồn kho | DONE | PR #5 |
+| INV-002 | Stock movement service + concurrency | DONE | PR #5; CAS `stockVersion` + `stockOperations` |
 | INV-003 | Tồn đầu kỳ/OPENING_BALANCE từ Excel | DONE | PR #5 |
 | PUR-001 | Phiếu nhập hàng | DONE | PR #5 |
 | PUR-002 | Hủy/hoàn phiếu nhập an toàn | DONE | PR #5 |
@@ -65,10 +65,10 @@ Tài liệu này dùng để AI trung tâm phân việc cho các AI/đoạn chat
 |---|---|---|---|
 | SALE-001 | POS/giỏ hàng responsive | DONE | PR #9 |
 | SALE-002 | Tạo đơn + trừ tồn an toàn | DONE | PR #9, dùng INV-002 CAS/idempotency |
-| SALE-003 | Chọn khách hàng/khách lẻ | DONE | PR #9 + CRM PR #6 |
+| SALE-003 | Chọn khách hàng/khách lẻ | DONE | PR #9 + PR #6 |
 | SALE-004 | Thanh toán tiền mặt/chuyển khoản/khác | DONE | PR #9 |
 | SALE-005 | Lịch sử đơn hàng | DONE | PR #9 |
-| SALE-006 | Hủy/hoàn đơn + hoàn kho | DONE | PR #9, `SALE_RETURN_{saleId}` |
+| SALE-006 | Hủy/hoàn đơn + hoàn kho | DONE | PR #9 |
 
 ## Giai đoạn 5 — QR, Barcode, In tem
 
@@ -86,68 +86,57 @@ Tài liệu này dùng để AI trung tâm phân việc cho các AI/đoạn chat
 
 ## Giai đoạn 6 — Doanh thu, giá vốn, lợi nhuận, báo cáo
 
-Các dependency giao dịch chính đã merge vào `main`. Chat 5 được phép bắt đầu từ `main` mới nhất.
-
-| ID | Công việc | Trạng thái | Phụ thuộc |
+| ID | Công việc | Trạng thái | Ghi chú |
 |---|---|---|---|
-| REP-001 | Doanh thu ngày/tuần/tháng/quý/năm | TODO | Sales DONE |
-| REP-002 | Giá vốn theo snapshot đơn bán | TODO | Sales DONE |
-| REP-003 | Lợi nhuận gộp | TODO | REP-001/002 |
-| REP-004 | Chi phí và lợi nhuận ròng | TODO | Expenses DONE |
-| REP-005 | Báo cáo tồn kho | TODO | Inventory DONE |
-| REP-006 | Báo cáo nhập/xuất | TODO | Purchases/StockOuts DONE |
-| REP-007 | Báo cáo khách hàng/nhà cung cấp cơ bản | TODO | CRM DONE |
-| REP-008 | Xuất báo cáo Excel | TODO | Reports |
+| REP-001 | Doanh thu ngày/tuần/tháng/quý/năm | DONE | PR #10 |
+| REP-002 | Giá vốn theo snapshot đơn bán | DONE | PR #10; không dùng Product.costPrice lịch sử |
+| REP-003 | Lợi nhuận gộp | DONE | PR #10 |
+| REP-004 | Chi phí và lợi nhuận ròng | DONE | PR #10 |
+| REP-005 | Báo cáo tồn kho | DONE | PR #10 |
+| REP-006 | Báo cáo nhập/xuất | DONE | PR #10 |
+| REP-007 | Báo cáo khách hàng/nhà cung cấp cơ bản | DONE | PR #10 |
+| REP-008 | Xuất báo cáo Excel | DONE | PR #10 |
 
 ## Giai đoạn 7 — Sao lưu, bảo mật, chất lượng
 
-| ID | Công việc | Trạng thái |
-|---|---|---|
-| BACK-001 | Xuất backup JSON có schemaVersion | TODO |
-| BACK-002 | Restore preview/validate/confirm | TODO |
-| BACK-003 | Export Excel dữ liệu chính | TODO |
-| SEC-001 | Hoàn thiện Firebase Rules cho node mới | TODO |
-| QA-001 | Responsive điện thoại/tablet/PC | TODO |
-| QA-002 | Touch target + camera permission + rotate screen | TODO |
-| QA-003 | Test luồng kho xuyên module | TODO |
-| QA-004 | Test sai mạng/mất mạng/lỗi Firebase | TODO |
-| QA-005 | Regression trước release | TODO |
+| ID | Công việc | Trạng thái | Ghi chú |
+|---|---|---|---|
+| BACK-001 | Xuất backup JSON có schemaVersion | DONE | PR #10; gồm stockOperations/stockVersion |
+| BACK-002 | Restore preview/validate/confirm | BLOCKED | PR #10 có preview/validate fail-closed; write cần contract restore đặc quyền được AI trung tâm duyệt |
+| BACK-003 | Export Excel dữ liệu chính | DONE | PR #10 |
+| SEC-001 | Hoàn thiện Firebase Rules cho node mới | REVIEW | CAS/idempotency đã có; cần chốt ma trận quyền owner/staff và restore policy trước release |
+| QA-001 | Responsive điện thoại/tablet/PC | REVIEW | Static/test tự động pass; cần smoke test thiết bị thật |
+| QA-002 | Touch target + camera permission + rotate screen | REVIEW | Cần Android/iOS thật qua HTTPS |
+| QA-003 | Test luồng kho xuyên module | REVIEW | Cần Firebase thật với dữ liệu test |
+| QA-004 | Test sai mạng/mất mạng/lỗi Firebase | REVIEW | Cần môi trường runtime thật |
+| QA-005 | Regression trước release | REVIEW | PR #10 test 13/13 + build xanh; còn smoke test release |
+
+## Quyết định restore hiện tại
+
+- Không nới Rules giao dịch bình thường chỉ để restore.
+- Restore write trong browser đang bị khóa fail-closed để bảo toàn `stockVersion` và `stockOperations`.
+- AI trung tâm sẽ thiết kế một contract restore owner-only riêng nếu tiếp tục yêu cầu browser-only; hoặc tách restore đặc quyền sang môi trường Admin đáng tin cậy.
+- Không đánh dấu BACK-002 DONE cho tới khi restore thật được kiểm thử an toàn.
 
 ## Tiêu chuẩn responsive bắt buộc
 
-Mọi module phải:
-- Chạy tốt ở điện thoại từ khoảng 320 px chiều rộng, tablet và PC.
-- Không bắt người dùng cuộn ngang cả trang; bảng lớn phải có card/mobile layout hoặc vùng cuộn cục bộ hợp lý.
-- Nút thao tác chính đủ lớn cho cảm ứng (mục tiêu tối thiểu khoảng 44 px chiều cao/vùng chạm).
-- Form dùng được với bàn phím điện thoại, input number/tel/search phù hợp.
-- Camera scanner hoạt động qua HTTPS trên domain thật, có fallback/chỉ dẫn quyền camera.
-- In tem có CSS `@media print` riêng, không phụ thuộc kích thước màn hình.
-- Loading/error/empty state rõ ràng.
+Mọi module phải chạy tốt ở điện thoại khoảng 320 px+, tablet và PC; không cuộn ngang toàn trang; touch target chính khoảng 44 px; camera chạy qua HTTPS; in tem dùng CSS print riêng; loading/error/empty state rõ ràng.
 
 ## Quy tắc nhận việc cho AI module
 
-Mỗi chat/module phải nhận:
-1. Task ID.
-2. Branch riêng.
-3. Phạm vi file được phép sửa.
-4. Schema/interface phải tuân thủ.
-5. File cấm sửa nếu không được AI trung tâm cho phép.
-
-AI module không tự sửa `DATABASE_SCHEMA.md`, `PROJECT_RULES.md`, Firebase rules, shared types hoặc router tổng nếu nhiệm vụ không cho phép.
+Mỗi chat/module phải nhận task ID, branch riêng, phạm vi file, schema/interface phải tuân thủ và file cấm sửa. AI module không tự sửa kiến trúc/schema/rules/shared types nếu chưa được AI trung tâm cho phép.
 
 ## Quyết định triển khai frontend
 
 - Không dùng Firebase Hosting.
-- Build thành `dist/` và sau này người dùng tự đưa lên hosting/domain riêng.
+- Build thành `dist/` và người dùng đưa lên hosting/domain riêng.
 - Firebase dùng Authentication + Realtime Database.
-- Mọi camera feature trên website thật phải chạy HTTPS.
+- Camera trên website thật phải chạy HTTPS.
 
-## Thứ tự ưu tiên
+## Thứ tự ưu tiên hiện tại
 
-1. Kho/nhập/xuất/kiểm kê: DONE.
-2. CRM/Expenses: DONE.
-3. QR/Barcode/In tem: DONE.
-4. Sales/POS: DONE.
-5. Chat Báo cáo/Backup/QA: được mở khóa, thực hiện `REP`, `BACK`, `SEC`, `QA` trên branch riêng từ `main` mới nhất.
+1. Các module chính: DONE.
+2. Reports/backup export: DONE qua PR #10.
+3. Hoàn thiện trước release: publish Rules mới nhất, smoke test Firebase/device thật, chốt quyền owner/staff, quyết định cơ chế BACK-002 restore write.
 
 AI trung tâm giữ quyền review/merge và giải quyết xung đột giữa các PR.
