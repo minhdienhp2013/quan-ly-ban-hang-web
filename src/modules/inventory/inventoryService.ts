@@ -1,7 +1,6 @@
 import {
   equalTo,
   get,
-  increment,
   limitToLast,
   onValue,
   orderByChild,
@@ -9,6 +8,7 @@ import {
   query,
   ref,
   update,
+  type Database,
   type Unsubscribe,
 } from 'firebase/database';
 import { db } from '../../firebase/client';
@@ -17,8 +17,19 @@ import type {
   Product,
   StockMovement,
   StockMovementType,
+  StockOperationReceipt,
   StockReferenceType,
 } from '../../types/models';
+import {
+  buildStockOperationId,
+  normalizeStockVersion,
+  planStockDelta,
+  roundStockQuantity,
+  stableStockOperationHash,
+  StockPlanError,
+} from './stockOperationCas';
+
+const MAX_STOCK_OPERATION_ATTEMPTS = 4;
 
 export interface StockChangeInput {
   productId: string;
@@ -56,10 +67,6 @@ function asProducts(value: unknown): Record<string, Product> {
   return value as Record<string, Product>;
 }
 
-function roundQuantity(value: number) {
-  return Math.round(value * 1000) / 1000;
-}
-
 function assertValidDelta(delta: number) {
   if (!Number.isFinite(delta) || delta === 0) {
     throw new Error('Số lượng thay đổi tồn kho phải là số khác 0.');
@@ -77,17 +84,130 @@ function aggregateChanges(changes: StockChangeInput[]) {
       continue;
     }
 
-    const quantityDelta = roundQuantity(current.quantityDelta + change.quantityDelta);
+    if (
+      typeof current.expectedQuantityBefore === 'number' &&
+      typeof change.expectedQuantityBefore === 'number' &&
+      roundStockQuantity(current.expectedQuantityBefore) !== roundStockQuantity(change.expectedQuantityBefore)
+    ) {
+      throw new Error(`Có nhiều điều kiện tồn kho khác nhau cho sản phẩm ${change.productId}.`);
+    }
+
+    const quantityDelta = roundStockQuantity(current.quantityDelta + change.quantityDelta);
     aggregated.set(change.productId, {
       productId: change.productId,
       quantityDelta,
-      ...(typeof change.unitCost === 'number' ? { unitCost: change.unitCost } : {}),
+      ...(typeof change.unitCost === 'number'
+        ? { unitCost: change.unitCost }
+        : typeof current.unitCost === 'number'
+          ? { unitCost: current.unitCost }
+          : {}),
       ...(change.note ? { note: change.note } : current.note ? { note: current.note } : {}),
-      ...(typeof current.expectedQuantityBefore === 'number' ? { expectedQuantityBefore: current.expectedQuantityBefore } : typeof change.expectedQuantityBefore === 'number' ? { expectedQuantityBefore: change.expectedQuantityBefore } : {}),
+      ...(typeof current.expectedQuantityBefore === 'number'
+        ? { expectedQuantityBefore: current.expectedQuantityBefore }
+        : typeof change.expectedQuantityBefore === 'number'
+          ? { expectedQuantityBefore: change.expectedQuantityBefore }
+          : {}),
     });
   }
 
   return [...aggregated.values()].filter((change) => change.quantityDelta !== 0);
+}
+
+function assertProtectedPathsAreNotOverwritten(input: StockOperationInput) {
+  for (const path of Object.keys(input.extraUpdates ?? {})) {
+    if (
+      /^products\/[^/]+\/(stockQuantity|stockVersion)(\/|$)/.test(path) ||
+      path === 'stockMovements' ||
+      path.startsWith('stockMovements/') ||
+      path === 'stockOperations' ||
+      path.startsWith('stockOperations/')
+    ) {
+      throw new Error(`Đường dẫn ${path} phải do stock operation service quản lý.`);
+    }
+  }
+}
+
+async function readOperationReceipt(
+  database: Database,
+  operationId: string,
+): Promise<StockOperationReceipt | null> {
+  const snapshot = await get(ref(database, `stockOperations/${operationId}`));
+  return snapshot.exists() ? (snapshot.val() as StockOperationReceipt) : null;
+}
+
+function assertReceiptMatchesInput(receipt: StockOperationReceipt, input: StockOperationInput) {
+  if (
+    receipt.id !== buildStockOperationId(input.type, input.referenceId) ||
+    receipt.type !== input.type ||
+    receipt.referenceType !== input.referenceType ||
+    receipt.referenceId !== input.referenceId
+  ) {
+    throw new Error('Phát hiện trùng operationId với một nghiệp vụ kho khác.');
+  }
+}
+
+async function readCommittedMovements(
+  database: Database,
+  input: StockOperationInput,
+): Promise<StockMovement[]> {
+  const snapshot = await get(
+    query(ref(database, 'stockMovements'), orderByChild('referenceId'), equalTo(input.referenceId)),
+  );
+  if (!snapshot.exists()) return [];
+  const raw = snapshot.val() as Record<string, StockMovement>;
+  return Object.entries(raw)
+    .map(([id, movement]) => ({ ...movement, id: movement.id || id }))
+    .filter((movement) => movement.type === input.type)
+    .sort((a, b) => a.createdAt - b.createdAt);
+}
+
+async function readProductsForAttempt(
+  database: Database,
+  changes: StockChangeInput[],
+): Promise<Record<string, Product>> {
+  const entries = await Promise.all(
+    changes.map(async (change) => {
+      const snapshot = await get(ref(database, `products/${change.productId}`));
+      if (!snapshot.exists()) {
+        throw new Error(`Không tìm thấy sản phẩm ${change.productId}.`);
+      }
+      const product = snapshot.val() as Product;
+      return [
+        change.productId,
+        {
+          ...product,
+          id: product.id || change.productId,
+          stockQuantity: Number(product.stockQuantity) || 0,
+          stockVersion: normalizeStockVersion(product.stockVersion),
+        },
+      ] as const;
+    }),
+  );
+  return Object.fromEntries(entries);
+}
+
+function isCasRuleRejection(error: unknown) {
+  if (!error || typeof error !== 'object') return false;
+  const candidate = error as { code?: unknown; message?: unknown };
+  const code = String(candidate.code ?? '').toLowerCase();
+  const message = String(candidate.message ?? '').toLowerCase();
+  return (
+    code.includes('permission_denied') ||
+    code.includes('permission-denied') ||
+    message.includes('permission_denied') ||
+    message.includes('permission denied')
+  );
+}
+
+function buildOpeningBalanceReferenceId(rows: OpeningBalanceInput[]) {
+  const normalized = [...rows]
+    .sort((a, b) => a.productId.localeCompare(b.productId))
+    .flatMap((row) => [
+      row.productId,
+      roundStockQuantity(row.quantity),
+      typeof row.unitCost === 'number' ? Math.round(row.unitCost) : undefined,
+    ]);
+  return `opening-${stableStockOperationHash(normalized)}`;
 }
 
 export async function getProductsOnce(): Promise<Product[]> {
@@ -99,95 +219,142 @@ export async function getProductsOnce(): Promise<Product[]> {
     ...product,
     id: product.id || id,
     stockQuantity: Number(product.stockQuantity) || 0,
+    stockVersion: normalizeStockVersion(product.stockVersion),
   }));
 }
 
 export async function commitStockOperation(input: StockOperationInput): Promise<StockMovement[]> {
   const database = requireDatabase();
+  assertProtectedPathsAreNotOverwritten(input);
   const changes = aggregateChanges(input.changes);
   if (changes.length === 0) {
     throw new Error('Nghiệp vụ không có thay đổi tồn kho để ghi nhận.');
   }
 
-  const productSnapshot = await get(ref(database, 'products'));
-  const products = asProducts(productSnapshot.val());
-  const now = Date.now();
-  const updates: Record<string, unknown> = { ...(input.extraUpdates ?? {}) };
-  const movements: StockMovement[] = [];
+  const operationId = buildStockOperationId(input.type, input.referenceId);
 
-  for (const change of changes) {
-    const product = products[change.productId];
-    if (!product) {
-      throw new Error(`Không tìm thấy sản phẩm ${change.productId}.`);
+  for (let attempt = 1; attempt <= MAX_STOCK_OPERATION_ATTEMPTS; attempt += 1) {
+    const existingReceipt = await readOperationReceipt(database, operationId);
+    if (existingReceipt) {
+      assertReceiptMatchesInput(existingReceipt, input);
+      return readCommittedMovements(database, input);
     }
 
-    const quantityBefore = Number(product.stockQuantity) || 0;
-    if (typeof change.expectedQuantityBefore === 'number' && roundQuantity(quantityBefore) !== roundQuantity(change.expectedQuantityBefore)) {
-      throw new Error(`Tồn của ${product.sku} - ${product.name} đã thay đổi từ ${change.expectedQuantityBefore} thành ${quantityBefore}. Vui lòng tải lại dữ liệu trước khi tiếp tục.`);
-    }
-    const quantityAfter = roundQuantity(quantityBefore + change.quantityDelta);
-    if (quantityAfter < 0) {
-      throw new Error(
-        `Không đủ tồn cho ${product.sku} - ${product.name}. Tồn hiện tại ${quantityBefore}, yêu cầu thay đổi ${change.quantityDelta}.`,
-      );
-    }
+    const products = await readProductsForAttempt(database, changes);
+    const now = Date.now();
+    const updates: Record<string, unknown> = { ...(input.extraUpdates ?? {}) };
+    const movements: StockMovement[] = [];
 
-    const movementId = push(ref(database, 'stockMovements')).key;
-    if (!movementId) {
-      throw new Error('Không thể tạo mã nhật ký kho.');
-    }
+    for (const change of changes) {
+      const product = products[change.productId];
+      if (!product) {
+        throw new Error(`Không tìm thấy sản phẩm ${change.productId}.`);
+      }
 
-    const movement: StockMovement = {
-      id: movementId,
-      productId: product.id || change.productId,
-      type: input.type,
-      quantityDelta: roundQuantity(change.quantityDelta),
-      quantityBefore,
-      quantityAfter,
-      referenceType: input.referenceType,
-      referenceId: input.referenceId,
-      createdBy: input.actorUid,
-      createdAt: now,
-      ...(typeof change.unitCost === 'number' ? { unitCost: Math.round(change.unitCost) } : {}),
-      ...(change.note?.trim() ? { note: change.note.trim() } : {}),
-    };
+      let plan;
+      try {
+        plan = planStockDelta(change, {
+          productId: change.productId,
+          stockQuantity: product.stockQuantity,
+          stockVersion: product.stockVersion,
+        });
+      } catch (error) {
+        if (error instanceof StockPlanError && error.code === 'STALE_STOCK') {
+          throw new Error(
+            `Tồn của ${product.sku} - ${product.name} đã thay đổi. ${error.message} Vui lòng tải lại dữ liệu trước khi tiếp tục.`,
+          );
+        }
+        if (error instanceof StockPlanError && error.code === 'INSUFFICIENT_STOCK') {
+          throw new Error(`Không đủ tồn cho ${product.sku} - ${product.name}. ${error.message}`);
+        }
+        throw error;
+      }
 
-    movements.push(movement);
-    updates[`products/${change.productId}/stockQuantity`] = increment(change.quantityDelta);
-    updates[`products/${change.productId}/updatedAt`] = now;
-    updates[`stockMovements/${movementId}`] = movement;
+      const movementId = push(ref(database, 'stockMovements')).key;
+      if (!movementId) {
+        throw new Error('Không thể tạo mã nhật ký kho.');
+      }
 
-    const fieldUpdates = input.productFieldUpdates?.[change.productId];
-    if (fieldUpdates) {
-      for (const [field, value] of Object.entries(fieldUpdates)) {
-        if (field === 'stockQuantity' || field === 'id') continue;
-        updates[`products/${change.productId}/${field}`] = value;
+      const movement: StockMovement = {
+        id: movementId,
+        productId: product.id || change.productId,
+        type: input.type,
+        quantityDelta: plan.quantityDelta,
+        quantityBefore: plan.quantityBefore,
+        quantityAfter: plan.quantityAfter,
+        referenceType: input.referenceType,
+        referenceId: input.referenceId,
+        createdBy: input.actorUid,
+        createdAt: now,
+        ...(typeof change.unitCost === 'number' ? { unitCost: Math.round(change.unitCost) } : {}),
+        ...(change.note?.trim() ? { note: change.note.trim() } : {}),
+      };
+
+      movements.push(movement);
+      updates[`products/${change.productId}/stockQuantity`] = plan.quantityAfter;
+      updates[`products/${change.productId}/stockVersion`] = plan.stockVersionAfter;
+      updates[`products/${change.productId}/updatedAt`] = now;
+      updates[`stockMovements/${movementId}`] = movement;
+
+      const fieldUpdates = input.productFieldUpdates?.[change.productId];
+      if (fieldUpdates) {
+        for (const [field, value] of Object.entries(fieldUpdates)) {
+          if (field === 'stockQuantity' || field === 'stockVersion' || field === 'id') continue;
+          updates[`products/${change.productId}/${field}`] = value;
+        }
       }
     }
-  }
 
-  if (input.audit) {
-    const auditId = push(ref(database, 'auditLogs')).key;
-    if (!auditId) {
-      throw new Error('Không thể tạo nhật ký kiểm toán.');
+    const receipt: StockOperationReceipt = {
+      id: operationId,
+      type: input.type,
+      referenceType: input.referenceType,
+      referenceId: input.referenceId,
+      actorUid: input.actorUid,
+      createdAt: now,
+    };
+    updates[`stockOperations/${operationId}`] = receipt;
+
+    if (input.audit) {
+      const auditId = push(ref(database, 'auditLogs')).key;
+      if (!auditId) {
+        throw new Error('Không thể tạo nhật ký kiểm toán.');
+      }
+
+      const auditLog: AuditLog = {
+        id: auditId,
+        actorUid: input.actorUid,
+        action: input.audit.action,
+        entityType: input.audit.entityType,
+        createdAt: now,
+        ...(input.audit.entityId ? { entityId: input.audit.entityId } : {}),
+        ...(input.audit.summary ? { summary: input.audit.summary } : {}),
+      };
+      updates[`auditLogs/${auditId}`] = auditLog;
     }
 
-    const auditLog: AuditLog = {
-      id: auditId,
-      actorUid: input.actorUid,
-      action: input.audit.action,
-      entityType: input.audit.entityType,
-      createdAt: now,
-      ...(input.audit.entityId ? { entityId: input.audit.entityId } : {}),
-      ...(input.audit.summary ? { summary: input.audit.summary } : {}),
-    };
-    updates[`auditLogs/${auditId}`] = auditLog;
+    try {
+      await update(ref(database), updates);
+      return movements;
+    } catch (error) {
+      const committedReceipt = await readOperationReceipt(database, operationId);
+      if (committedReceipt) {
+        assertReceiptMatchesInput(committedReceipt, input);
+        return readCommittedMovements(database, input);
+      }
+
+      if (!isCasRuleRejection(error)) throw error;
+      if (attempt === MAX_STOCK_OPERATION_ATTEMPTS) {
+        throw new Error(
+          `Tồn kho thay đổi đồng thời quá nhiều lần. Nghiệp vụ chưa được ghi sau ${MAX_STOCK_OPERATION_ATTEMPTS} lần thử; vui lòng thử lại.`,
+        );
+      }
+      // CAS conflict: vòng lặp đọc lại toàn bộ product snapshots, dựng lại
+      // quantityBefore/quantityAfter + movement rồi thử atomic update mới.
+    }
   }
 
-  // RTDB multi-location update is atomic: business record, aggregate stock,
-  // stock movements and audit log either commit together or all fail.
-  await update(ref(database), updates);
-  return movements;
+  throw new Error('Không thể ghi nghiệp vụ kho.');
 }
 
 export function subscribeStockMovements(
@@ -241,35 +408,25 @@ export async function applyOpeningBalances(
   rows: OpeningBalanceInput[],
   actorUid: string,
 ): Promise<number> {
-  const database = requireDatabase();
-  const snapshot = await get(ref(database, 'products'));
-  const products = asProducts(snapshot.val());
   const changes: StockChangeInput[] = [];
 
   for (const row of rows) {
-    const product = products[row.productId];
-    if (!product) throw new Error(`Không tìm thấy sản phẩm ${row.productId}.`);
-    const currentStock = Number(product.stockQuantity) || 0;
-    if (currentStock !== 0) {
-      throw new Error(
-        `${product.sku} - ${product.name} đã có tồn ${currentStock}. Tồn đầu kỳ chỉ áp dụng khi tồn hiện tại bằng 0.`,
-      );
-    }
+    if (!row.productId) throw new Error('Dòng tồn đầu kỳ thiếu sản phẩm.');
     if (!Number.isFinite(row.quantity) || row.quantity < 0) {
-      throw new Error(`Tồn đầu kỳ của ${product.sku} không hợp lệ.`);
+      throw new Error(`Tồn đầu kỳ của sản phẩm ${row.productId} không hợp lệ.`);
     }
     if (row.quantity === 0) continue;
     changes.push({
       productId: row.productId,
       quantityDelta: row.quantity,
-      unitCost: typeof row.unitCost === 'number' ? row.unitCost : product.costPrice,
+      ...(typeof row.unitCost === 'number' ? { unitCost: row.unitCost } : {}),
       note: 'Tồn đầu kỳ từ Excel',
       expectedQuantityBefore: 0,
     });
   }
 
   if (changes.length === 0) return 0;
-  const referenceId = `opening-${Date.now()}`;
+  const referenceId = buildOpeningBalanceReferenceId(rows);
   await commitStockOperation({
     type: 'OPENING_BALANCE',
     referenceType: 'opening',
