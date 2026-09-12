@@ -1,7 +1,7 @@
 import { get, onValue, push, ref, type Unsubscribe } from 'firebase/database';
 import { db } from '../../firebase/client';
 import type { Purchase, PurchaseItem, Supplier } from '../../types/models';
-import { commitStockOperation, hasReferenceMovement } from '../inventory/inventoryService';
+import { commitStockOperation } from '../inventory/inventoryService';
 
 export interface PurchaseLineInput {
   productId: string;
@@ -111,7 +111,6 @@ export async function cancelPurchase(purchaseId: string, actorUid: string): Prom
   const purchase = snapshot.val() as Purchase;
   if (purchase.status === 'cancelled') return;
 
-  if (await hasReferenceMovement(purchaseId, 'PURCHASE_RETURN')) return;
   const now = Date.now();
   await commitStockOperation({
     type: 'PURCHASE_RETURN',
