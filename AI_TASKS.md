@@ -36,17 +36,17 @@ Tài liệu này dùng để AI trung tâm phân việc cho các AI/đoạn chat
 
 ## Giai đoạn 2 — Kho, nhập, xuất, kiểm kê
 
-| ID | Công việc | Trạng thái | Phụ thuộc |
+| ID | Công việc | Trạng thái | Ghi chú |
 |---|---|---|---|
-| INV-001 | Màn hình tồn kho | TODO | Products |
-| INV-002 | Stock movement service + transaction | TODO | Schema |
-| INV-003 | Tồn đầu kỳ/OPENING_BALANCE từ Excel | TODO | INV-002 |
-| PUR-001 | Phiếu nhập hàng | TODO | INV-002, Suppliers |
-| PUR-002 | Hủy/hoàn phiếu nhập an toàn | TODO | PUR-001 |
-| OUT-001 | Phiếu xuất hàng không doanh thu | TODO | INV-002 |
-| OUT-002 | Hủy phiếu xuất/hoàn tồn | TODO | OUT-001 |
-| STK-001 | Kiểm kê draft | TODO | INV-001 |
-| STK-002 | Chốt kiểm kê + điều chỉnh kho | TODO | INV-002, STK-001 |
+| INV-001 | Màn hình tồn kho | DONE | PR #5, realtime + responsive |
+| INV-002 | Stock movement service + concurrency | DONE | PR #5; CAS `stockVersion` + `stockOperations` receipt; CI #109 xanh |
+| INV-003 | Tồn đầu kỳ/OPENING_BALANCE từ Excel | DONE | PR #5 |
+| PUR-001 | Phiếu nhập hàng | DONE | PR #5 |
+| PUR-002 | Hủy/hoàn phiếu nhập an toàn | DONE | PR #5 |
+| OUT-001 | Phiếu xuất hàng không doanh thu | DONE | PR #5 |
+| OUT-002 | Hủy phiếu xuất/hoàn tồn | DONE | PR #5 |
+| STK-001 | Kiểm kê draft | DONE | PR #5 |
+| STK-002 | Chốt kiểm kê + điều chỉnh kho | DONE | PR #5 |
 
 ## Giai đoạn 3 — CRM và chi phí
 
@@ -61,14 +61,16 @@ Tài liệu này dùng để AI trung tâm phân việc cho các AI/đoạn chat
 
 ## Giai đoạn 4 — Bán hàng/POS
 
+Inventory core đã merge vào `main` qua PR #5. `SALE-001`, `SALE-002`, `SALE-004`, `SALE-005`, `SALE-006` được phép bắt đầu. `SALE-003` tích hợp khách hàng hoàn chỉnh sau khi CRM merge nếu PR CRM chưa vào `main` tại thời điểm bắt đầu.
+
 | ID | Công việc | Trạng thái | Phụ thuộc |
 |---|---|---|---|
-| SALE-001 | POS/giỏ hàng responsive | TODO | Products, INV-002 |
-| SALE-002 | Tạo đơn + trừ tồn an toàn | TODO | INV-002 |
+| SALE-001 | POS/giỏ hàng responsive | TODO | Products, INV-002 DONE |
+| SALE-002 | Tạo đơn + trừ tồn an toàn | TODO | INV-002 DONE |
 | SALE-003 | Chọn khách hàng/khách lẻ | TODO | CUST-001 |
 | SALE-004 | Thanh toán tiền mặt/chuyển khoản/khác | TODO | SALE-001 |
 | SALE-005 | Lịch sử đơn hàng | TODO | SALE-002 |
-| SALE-006 | Hủy/hoàn đơn + hoàn kho | TODO | SALE-002, INV-002 |
+| SALE-006 | Hủy/hoàn đơn + hoàn kho | TODO | SALE-002, INV-002 DONE |
 
 ## Giai đoạn 5 — QR, Barcode, In tem
 
@@ -142,15 +144,12 @@ AI module không tự sửa `DATABASE_SCHEMA.md`, `PROJECT_RULES.md`, Firebase r
 
 ## Thứ tự ưu tiên
 
-### Có thể làm song song ngay
-1. Chat Kho: `INV-001/002/003`, sau đó `PUR`, `OUT`, `STK`.
-2. Chat CRM: `CUST`, `SUP`, `EXP`.
-3. Chat QR/In tem: `QR`, `BAR`, `PRINT`.
-
-### Chỉ bắt đầu sau khi Inventory core merge
-4. Chat Bán hàng: `SALE-*`.
+### Có thể làm song song
+1. Chat CRM: `CUST`, `SUP`, `EXP`.
+2. Chat QR/In tem: `QR`, `BAR`, `PRINT`.
+3. Chat Bán hàng: `SALE-*` — đã được mở khóa sau khi PR #5 merge.
 
 ### Sau khi giao dịch chính ổn định
-5. Chat Báo cáo/Backup/QA: `REP`, `BACK`, `SEC`, `QA`.
+4. Chat Báo cáo/Backup/QA: `REP`, `BACK`, `SEC`, `QA`.
 
 AI trung tâm giữ quyền review/merge và giải quyết xung đột giữa các PR.

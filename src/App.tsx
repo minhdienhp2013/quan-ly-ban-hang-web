@@ -7,13 +7,13 @@ import CustomersPage from './modules/customers/CustomersPage';
 import ExpensesPage from './modules/expenses/ExpensesPage';
 import ProductsWorkspacePage from './modules/products/ProductsWorkspacePage';
 import './modules/products/products.css';
+import SalesPage from './modules/sales/SalesPage';
 import SuppliersPage from './modules/suppliers/SuppliersPage';
 import DashboardPage from './pages/DashboardPage';
 import LoginPage from './pages/LoginPage';
 import ModulePlaceholderPage from './pages/ModulePlaceholderPage';
 
 const modulePages = {
-  sales: ['Bán hàng', 'Màn hình POS, giỏ hàng, thanh toán và lịch sử đơn bán.'],
   purchases: ['Nhập hàng', 'Tạo phiếu nhập, cập nhật giá vốn và tăng tồn kho.'],
   inventory: ['Kho', 'Theo dõi tồn kho và nhật ký biến động hàng hóa.'],
   stocktakes: ['Kiểm kê', 'Kiểm kê thực tế, chênh lệch và điều chỉnh tồn kho có truy vết.'],
@@ -36,10 +36,7 @@ export default function App() {
               <Route path="products" element={<ProductsWorkspacePage />} />
               <Route path="customers" element={<CustomersPage />} />
               <Route path="suppliers" element={<SuppliersPage />} />
-              <Route
-                path="sales"
-                element={<ModulePlaceholderPage title={modulePages.sales[0]} description={modulePages.sales[1]} />}
-              />
+              <Route path="sales" element={<SalesPage />} />
               <Route
                 path="purchases"
                 element={<ModulePlaceholderPage title={modulePages.purchases[0]} description={modulePages.purchases[1]} />}

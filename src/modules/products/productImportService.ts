@@ -25,6 +25,7 @@ function buildProduct(id: string, input: ProductInput, now: number): Product {
     costPrice: Math.round(input.costPrice),
     salePrice: Math.round(input.salePrice),
     stockQuantity: 0,
+    stockVersion: 0,
     active: input.active,
     createdAt: now,
     updatedAt: now,
