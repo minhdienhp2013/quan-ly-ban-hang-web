@@ -10,7 +10,7 @@ Xây dựng phần mềm quản lý bán hàng/kho chạy hoàn toàn trên trì
 - React Router cho điều hướng.
 - Firebase Authentication.
 - Firebase Realtime Database.
-- Firebase Hosting hoặc hosting tĩnh tương thích SPA.
+- Triển khai frontend lên hosting/domain riêng của người dùng hoặc bất kỳ static hosting tương thích SPA. **Không phụ thuộc Firebase Hosting.**
 - Thư viện đọc/ghi Excel chỉ dùng ở lớp import/export.
 - Quét QR dùng Web Camera API/thư viện QR tương thích trình duyệt.
 - In tem thông qua giao diện in của trình duyệt với CSS theo khổ tem; không phụ thuộc phần mềm desktop nếu không bắt buộc.
@@ -92,15 +92,25 @@ Không chỉ ẩn nút ở giao diện. Firebase Security Rules phải kiểm tr
 
 Phiên bản đầu ưu tiên online ổn định. Có thể bật cơ chế cache/persistence phù hợp sau khi luồng chính hoạt động đúng. Không thiết kế offline-first ngay từ đầu để tránh tăng độ phức tạp không cần thiết.
 
-## 9. Quyết định cần giữ ổn định ở giai đoạn đầu
+## 9. Triển khai frontend
+
+- `npm run build` tạo thư mục `dist/`.
+- Thư mục `dist/` có thể được upload lên hosting/domain riêng của người dùng.
+- Hosting phải hỗ trợ HTTPS; camera QR trên trình duyệt yêu cầu secure context khi triển khai thực tế.
+- Với SPA, web server cần fallback các route không phải file tĩnh về `index.html`.
+- Khi dùng domain riêng với Firebase Authentication, domain đó phải được thêm vào **Authentication → Settings → Authorized domains** trong Firebase Console.
+- Cấu hình Firebase Web được đưa vào lúc build bằng biến môi trường Vite; không dùng service account hoặc private key trong frontend.
+
+## 10. Quyết định cần giữ ổn định ở giai đoạn đầu
 
 - Một repository frontend chính.
 - Một schema Firebase thống nhất.
 - Một bộ type dùng chung.
 - Mỗi nghiệp vụ tồn kho có transaction log.
 - Không tách microservice khi chưa có nhu cầu thực tế.
+- Không buộc dự án vào một nhà cung cấp hosting cụ thể.
 
-## 10. Thứ tự xây dựng
+## 11. Thứ tự xây dựng
 
 1. Nền móng project + Firebase + auth.
 2. Products.
