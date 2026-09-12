@@ -35,6 +35,33 @@ export interface Category {
   updatedAt: number;
 }
 
+export interface Customer {
+  id: string;
+  code: string;
+  name: string;
+  phone?: string;
+  email?: string;
+  address?: string;
+  note?: string;
+  active: boolean;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface Supplier {
+  id: string;
+  code: string;
+  name: string;
+  phone?: string;
+  email?: string;
+  address?: string;
+  taxCode?: string;
+  note?: string;
+  active: boolean;
+  createdAt: number;
+  updatedAt: number;
+}
+
 export interface SaleItem {
   productId: string;
   sku: string;
@@ -45,17 +72,22 @@ export interface SaleItem {
   lineTotal: number;
 }
 
+export type PaymentMethod = 'cash' | 'bank_transfer' | 'other';
+
 export interface Sale {
   id: string;
   code: string;
+  customerId?: string;
+  customerName?: string;
   items: SaleItem[];
   subtotal: number;
   discount: number;
   total: number;
   costTotal: number;
   profit: number;
-  paymentMethod?: 'cash' | 'bank_transfer' | 'other';
-  status: 'completed' | 'cancelled';
+  paymentMethod?: PaymentMethod;
+  note?: string;
+  status: 'completed' | 'cancelled' | 'refunded';
   createdBy: string;
   createdAt: number;
   updatedAt: number;
@@ -73,9 +105,32 @@ export interface PurchaseItem {
 export interface Purchase {
   id: string;
   code: string;
+  supplierId?: string;
+  supplierName?: string;
   items: PurchaseItem[];
   total: number;
-  supplierName?: string;
+  note?: string;
+  status: 'completed' | 'cancelled';
+  createdBy: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export type StockOutReason = 'internal_use' | 'damage' | 'gift' | 'other';
+
+export interface StockOutItem {
+  productId: string;
+  sku: string;
+  name: string;
+  quantity: number;
+  costPrice: number;
+}
+
+export interface StockOut {
+  id: string;
+  code: string;
+  reason: StockOutReason;
+  items: StockOutItem[];
   note?: string;
   status: 'completed' | 'cancelled';
   createdBy: string;
@@ -84,12 +139,23 @@ export interface Purchase {
 }
 
 export type StockMovementType =
+  | 'OPENING_BALANCE'
   | 'PURCHASE'
+  | 'PURCHASE_RETURN'
   | 'SALE'
   | 'SALE_RETURN'
-  | 'PURCHASE_RETURN'
+  | 'STOCK_OUT'
+  | 'STOCK_OUT_REVERSAL'
   | 'STOCKTAKE_ADJUSTMENT'
   | 'MANUAL_ADJUSTMENT';
+
+export type StockReferenceType =
+  | 'opening'
+  | 'sale'
+  | 'purchase'
+  | 'stockout'
+  | 'stocktake'
+  | 'manual';
 
 export interface StockMovement {
   id: string;
@@ -98,7 +164,8 @@ export interface StockMovement {
   quantityDelta: number;
   quantityBefore: number;
   quantityAfter: number;
-  referenceType?: 'sale' | 'purchase' | 'stocktake' | 'manual';
+  unitCost?: number;
+  referenceType?: StockReferenceType;
   referenceId?: string;
   note?: string;
   createdBy: string;
@@ -117,9 +184,33 @@ export interface Stocktake {
   code: string;
   status: 'draft' | 'completed' | 'cancelled';
   items: StocktakeItem[];
+  note?: string;
   createdBy: string;
   createdAt: number;
   completedAt?: number;
+}
+
+export interface Expense {
+  id: string;
+  code: string;
+  category: string;
+  amount: number;
+  expenseDate: number;
+  note?: string;
+  status: 'completed' | 'cancelled';
+  createdBy: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface LabelTemplateSettings {
+  id: string;
+  name: string;
+  columns: 1 | 2;
+  labelWidthMm: number;
+  labelHeightMm: number;
+  gapMm?: number;
+  pageMarginMm?: number;
 }
 
 export interface StoreSettings {
@@ -127,9 +218,27 @@ export interface StoreSettings {
   address?: string;
   phone?: string;
   currency: 'VND';
-  defaultLabelWidthMm?: number;
-  defaultLabelHeightMm?: number;
+  defaultLabelTemplateId?: string;
+  labelTemplates?: Record<string, LabelTemplateSettings>;
   updatedAt: number;
+}
+
+export interface BackupEnvelope {
+  schemaVersion: 1;
+  exportedAt: number;
+  data: {
+    products?: Record<string, Product>;
+    categories?: Record<string, Category>;
+    customers?: Record<string, Customer>;
+    suppliers?: Record<string, Supplier>;
+    sales?: Record<string, Sale>;
+    purchases?: Record<string, Purchase>;
+    stockOuts?: Record<string, StockOut>;
+    stockMovements?: Record<string, StockMovement>;
+    stocktakes?: Record<string, Stocktake>;
+    expenses?: Record<string, Expense>;
+    settings?: StoreSettings;
+  };
 }
 
 export interface AuditLog {
