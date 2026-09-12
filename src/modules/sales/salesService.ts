@@ -11,9 +11,17 @@ import {
   type Unsubscribe,
 } from 'firebase/database';
 import { db } from '../../firebase/client';
-import type { Customer, PaymentMethod, Product, Sale, SaleItem } from '../../types/models';
+import type {
+  Customer,
+  PaymentMethod,
+  Product,
+  Sale,
+  SaleItem,
+  StockMovementType,
+  StockOperationReceipt,
+} from '../../types/models';
 import { commitStockOperation } from '../inventory/inventoryService';
-import { roundStockQuantity } from '../inventory/stockOperationCas';
+import { buildStockOperationId, roundStockQuantity } from '../inventory/stockOperationCas';
 
 const DEFAULT_HISTORY_LIMIT = 50;
 const MAX_HISTORY_LIMIT = 200;
@@ -160,12 +168,52 @@ async function readCustomer(customerId?: string): Promise<Customer | null> {
   return { ...customer, id: customer.id || id };
 }
 
-async function getPersistedSale(saleId: string): Promise<Sale> {
+async function readSaleOrNull(saleId: string): Promise<Sale | null> {
   const database = requireDatabase();
   const snapshot = await get(ref(database, `sales/${saleId}`));
+  if (!snapshot.exists()) return null;
   const sale = normalizeSale(saleId, snapshot.val());
+  if (!sale) throw new Error('Đơn bán đã tồn tại nhưng dữ liệu không hợp lệ.');
+  return sale;
+}
+
+async function getPersistedSale(saleId: string): Promise<Sale> {
+  const sale = await readSaleOrNull(saleId);
   if (!sale) throw new Error('Nghiệp vụ kho đã hoàn tất nhưng không đọc được đơn bán đã lưu.');
   return sale;
+}
+
+function assertReceiptMatches(
+  receipt: StockOperationReceipt,
+  type: StockMovementType,
+  referenceId: string,
+) {
+  const expectedId = buildStockOperationId(type, referenceId);
+  if (
+    receipt.id !== expectedId ||
+    receipt.type !== type ||
+    receipt.referenceType !== 'sale' ||
+    receipt.referenceId !== referenceId
+  ) {
+    throw new Error('Phát hiện stockOperations receipt không khớp với đơn bán.');
+  }
+}
+
+async function readReceipt(type: StockMovementType, saleId: string): Promise<StockOperationReceipt | null> {
+  const database = requireDatabase();
+  const operationId = buildStockOperationId(type, saleId);
+  const snapshot = await get(ref(database, `stockOperations/${operationId}`));
+  if (!snapshot.exists()) return null;
+  const receipt = snapshot.val() as StockOperationReceipt;
+  assertReceiptMatches(receipt, type, saleId);
+  return receipt;
+}
+
+async function readCommittedCreateRetry(saleId: string): Promise<Sale | null> {
+  const [sale, receipt] = await Promise.all([readSaleOrNull(saleId), readReceipt('SALE', saleId)]);
+  if (!sale && !receipt) return null;
+  if (sale && receipt) return sale;
+  throw new Error('Phát hiện đơn bán/stockOperations receipt không đồng bộ. Dừng retry để tránh thay đổi tồn kho sai.');
 }
 
 export function createSaleId() {
@@ -178,6 +226,13 @@ export function createSaleId() {
 export async function createSale(input: CreateSaleInput, actorUid: string): Promise<Sale> {
   if (!actorUid) throw new Error('Phiên đăng nhập không hợp lệ.');
   if (!input.saleId) throw new Error('Thiếu mã đơn bán.');
+
+  // Nếu request trước đã commit nhưng trình duyệt mất phản hồi, xác nhận receipt
+  // trước khi đọc lại product/customer. Nhờ vậy retry vẫn trả đúng đơn đã commit
+  // dù metadata sau đó đã đổi trạng thái.
+  const committedRetry = await readCommittedCreateRetry(input.saleId);
+  if (committedRetry) return committedRetry;
+
   if (!Array.isArray(input.items) || input.items.length === 0) {
     throw new Error('Giỏ hàng phải có ít nhất một sản phẩm.');
   }
@@ -259,9 +314,6 @@ export async function createSale(input: CreateSaleInput, actorUid: string): Prom
     },
   });
 
-  // Nếu lần gọi trước đã commit nhưng client mất phản hồi, stockOperations receipt
-  // khiến commitStockOperation trả idempotent. Luôn đọc lại bản ghi thật để không
-  // trả về payload retry khác với đơn đã commit.
   return getPersistedSale(input.saleId);
 }
 
@@ -271,8 +323,21 @@ export async function reverseSale(
   nextStatus: 'cancelled' | 'refunded',
 ): Promise<Sale> {
   if (!actorUid) throw new Error('Phiên đăng nhập không hợp lệ.');
-  const sale = await getPersistedSale(saleId);
-  if (sale.status !== 'completed') return sale;
+
+  const [sale, existingReturnReceipt] = await Promise.all([
+    getPersistedSale(saleId),
+    readReceipt('SALE_RETURN', saleId),
+  ]);
+
+  if (existingReturnReceipt) {
+    if (sale.status === 'completed') {
+      throw new Error('Đơn vẫn ở trạng thái hoàn tất nhưng receipt hoàn kho đã tồn tại. Cần kiểm tra dữ liệu trước khi thao tác tiếp.');
+    }
+    return sale;
+  }
+  if (sale.status !== 'completed') {
+    throw new Error('Đơn đã đóng nhưng chưa có receipt hoàn kho. Cần kiểm tra dữ liệu trước khi thao tác tiếp.');
+  }
   if (sale.items.length === 0) throw new Error('Đơn bán không có dữ liệu mặt hàng để hoàn kho.');
 
   const updatedAt = Date.now();
