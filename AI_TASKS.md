@@ -12,88 +12,145 @@ Tài liệu này dùng để AI trung tâm phân việc cho các AI/đoạn chat
 
 ## Giai đoạn 0 — Nền móng
 
-| ID | Công việc | Phạm vi | Trạng thái | Ghi chú |
-|---|---|---|---|---|
-| CORE-001 | Xác lập quy tắc dự án | Docs | DONE | `PROJECT_RULES.md` |
-| CORE-002 | Xác lập kiến trúc ban đầu | Docs | DONE | `ARCHITECTURE.md` |
-| CORE-003 | Xác lập schema Firebase ban đầu | Docs | DONE | `DATABASE_SCHEMA.md` |
-| CORE-004 | Tạo bộ khung React + TypeScript + Vite | Core | DONE | PR #1, CI build thành công |
-| CORE-005 | Cấu hình Firebase Web qua env | Core | DONE | Firebase App/Auth + Realtime Database URL đã xác nhận |
-| CORE-006 | Tạo routing/layout chung | Core/UI | DONE | PR #2, responsive desktop + mobile, CI xanh |
-| CORE-007 | Thiết lập types dùng chung | Core | DONE | PR #2, bám `DATABASE_SCHEMA.md` |
-
-## Giai đoạn 1 — Đăng nhập và sản phẩm
-
-| ID | Công việc | Phạm vi | Trạng thái | Ghi chú |
-|---|---|---|---|---|
-| AUTH-001 | Đăng nhập Firebase Authentication | `auth` | DONE | Email/Password + protected routes, PR #2 |
-| AUTH-002 | Role owner/staff | `auth`, rules | REVIEW | Rules đã Publish; bootstrap owner sẽ kiểm tra khi website/local app được chạy |
-| PROD-001 | Danh sách sản phẩm | `products` | DONE | PR #3, realtime list, CI xanh |
-| PROD-002 | Thêm/sửa sản phẩm | `products` | DONE | PR #3, audit log, soft disable |
-| PROD-003 | Tìm theo SKU/barcode/QR | `products` | DONE | PR #3, tìm theo tên/SKU/barcode/QR |
-| PROD-004 | Import danh sách sản phẩm từ Excel | `excel`, `products` | DONE | PR #4, import linh hoạt, preview, kiểm tra trùng/lỗi, CI xanh |
-
-## Giai đoạn 2 — Kho
-
-| ID | Công việc | Phạm vi | Trạng thái |
+| ID | Công việc | Trạng thái | Ghi chú |
 |---|---|---|---|
-| INV-001 | Hiển thị tồn kho | `inventory` | TODO |
-| INV-002 | Stock movement service | `inventory` | TODO |
-| PUR-001 | Phiếu nhập hàng | `purchases` | TODO |
-| STK-001 | Kiểm kê hàng hóa | `stocktake` | TODO |
-| STK-002 | Điều chỉnh chênh lệch sau kiểm kê | `stocktake`, `inventory` | TODO |
+| CORE-001 | Quy tắc dự án | DONE | `PROJECT_RULES.md` |
+| CORE-002 | Kiến trúc ban đầu | DONE | `ARCHITECTURE.md` |
+| CORE-003 | Schema Firebase | DONE | `DATABASE_SCHEMA.md` |
+| CORE-004 | React + TypeScript + Vite | DONE | PR #1 |
+| CORE-005 | Firebase Web/Auth/RTDB | DONE | URL database xác nhận |
+| CORE-006 | Routing/layout responsive | DONE | PR #2 |
+| CORE-007 | Shared types | DONE | PR #2 |
+| AUTH-001 | Email/Password Auth | DONE | PR #2 |
+| AUTH-002 | Owner/staff + rules | REVIEW | Rules đã Publish; còn smoke test owner trên app chạy thật/local |
 
-## Giai đoạn 3 — Bán hàng
+## Giai đoạn 1 — Sản phẩm
 
-| ID | Công việc | Phạm vi | Trạng thái |
+| ID | Công việc | Trạng thái | Ghi chú |
 |---|---|---|---|
-| SALE-001 | Màn hình POS/giỏ hàng | `sales` | TODO |
-| SALE-002 | Tạo đơn và trừ kho an toàn | `sales`, `inventory` | TODO |
-| SALE-003 | Lịch sử đơn hàng | `sales` | TODO |
-| SALE-004 | Hủy/hoàn đơn có hoàn kho | `sales`, `inventory` | TODO |
+| PROD-001 | Danh sách sản phẩm realtime | DONE | PR #3 |
+| PROD-002 | Thêm/sửa/ngừng sử dụng | DONE | PR #3 |
+| PROD-003 | Tìm SKU/barcode/QR | DONE | PR #3 |
+| PROD-004 | Import Excel sản phẩm | DONE | PR #4, preview/trùng/lỗi |
+| PROD-005 | Danh mục sản phẩm | TODO | Có thể làm sau inventory core |
 
-## Giai đoạn 4 — QR và in tem
+## Giai đoạn 2 — Kho, nhập, xuất, kiểm kê
 
-| ID | Công việc | Phạm vi | Trạng thái |
+| ID | Công việc | Trạng thái | Phụ thuộc |
 |---|---|---|---|
-| QR-001 | Quét QR bằng camera điện thoại | `qr` | TODO |
-| QR-002 | Chế độ quét liên tục | `qr` | TODO |
-| QR-003 | Tạo QR cho sản phẩm | `qr`, `products` | TODO |
-| PRINT-001 | Thiết kế mẫu tem | `printing` | TODO |
-| PRINT-002 | Hỗ trợ nhiều khổ tem | `printing` | TODO |
-| PRINT-003 | In qua browser print | `printing` | TODO |
+| INV-001 | Màn hình tồn kho | TODO | Products |
+| INV-002 | Stock movement service + transaction | TODO | Schema |
+| INV-003 | Tồn đầu kỳ/OPENING_BALANCE từ Excel | TODO | INV-002 |
+| PUR-001 | Phiếu nhập hàng | TODO | INV-002, Suppliers |
+| PUR-002 | Hủy/hoàn phiếu nhập an toàn | TODO | PUR-001 |
+| OUT-001 | Phiếu xuất hàng không doanh thu | TODO | INV-002 |
+| OUT-002 | Hủy phiếu xuất/hoàn tồn | TODO | OUT-001 |
+| STK-001 | Kiểm kê draft | TODO | INV-001 |
+| STK-002 | Chốt kiểm kê + điều chỉnh kho | TODO | INV-002, STK-001 |
 
-## Giai đoạn 5 — Báo cáo
+## Giai đoạn 3 — CRM và chi phí
 
-| ID | Công việc | Phạm vi | Trạng thái |
+| ID | Công việc | Trạng thái |
+|---|---|---|
+| CUST-001 | Danh sách/thêm/sửa khách hàng | TODO |
+| CUST-002 | Tìm kiếm khách hàng | TODO |
+| SUP-001 | Danh sách/thêm/sửa nhà cung cấp | TODO |
+| SUP-002 | Tìm kiếm nhà cung cấp | TODO |
+| EXP-001 | Danh mục và ghi nhận chi phí | TODO |
+| EXP-002 | Hủy/sửa chi phí có audit | TODO |
+
+## Giai đoạn 4 — Bán hàng/POS
+
+| ID | Công việc | Trạng thái | Phụ thuộc |
 |---|---|---|---|
-| REP-001 | Doanh thu theo ngày/tuần/tháng/quý/năm | `reports` | TODO |
-| REP-002 | Giá vốn và lợi nhuận | `reports` | TODO |
-| REP-003 | Báo cáo tồn kho | `reports` | TODO |
-| REP-004 | Xuất Excel | `reports`, `excel` | TODO |
+| SALE-001 | POS/giỏ hàng responsive | TODO | Products, INV-002 |
+| SALE-002 | Tạo đơn + trừ tồn an toàn | TODO | INV-002 |
+| SALE-003 | Chọn khách hàng/khách lẻ | TODO | CUST-001 |
+| SALE-004 | Thanh toán tiền mặt/chuyển khoản/khác | TODO | SALE-001 |
+| SALE-005 | Lịch sử đơn hàng | TODO | SALE-002 |
+| SALE-006 | Hủy/hoàn đơn + hoàn kho | TODO | SALE-002, INV-002 |
+
+## Giai đoạn 5 — QR, Barcode, In tem
+
+| ID | Công việc | Trạng thái |
+|---|---|---|
+| QR-001 | Quét QR bằng camera điện thoại | TODO |
+| QR-002 | Quét liên tục + chống quét trùng | TODO |
+| QR-003 | Tạo QR sản phẩm | TODO |
+| BAR-001 | Tạo barcode CODE128/EAN13 khi hợp lệ | TODO |
+| PRINT-001 | Tem 2 nhãn 74×22 mm | TODO |
+| PRINT-002 | Tem 2 nhãn 72×22 mm | TODO |
+| PRINT-003 | Tem 1 nhãn 50×30 mm | TODO |
+| PRINT-004 | Mẫu tem tùy chỉnh mm + print preview | TODO |
+| PRINT-005 | In tên/SP/SKU/barcode/QR/giá tùy chọn | TODO |
+
+## Giai đoạn 6 — Doanh thu, giá vốn, lợi nhuận, báo cáo
+
+| ID | Công việc | Trạng thái | Phụ thuộc |
+|---|---|---|---|
+| REP-001 | Doanh thu ngày/tuần/tháng/quý/năm | TODO | Sales |
+| REP-002 | Giá vốn theo snapshot đơn bán | TODO | Sales |
+| REP-003 | Lợi nhuận gộp | TODO | REP-001/002 |
+| REP-004 | Chi phí và lợi nhuận ròng | TODO | Expenses |
+| REP-005 | Báo cáo tồn kho | TODO | Inventory |
+| REP-006 | Báo cáo nhập/xuất | TODO | Purchases/StockOuts |
+| REP-007 | Báo cáo khách hàng/nhà cung cấp cơ bản | TODO | CRM |
+| REP-008 | Xuất báo cáo Excel | TODO | Reports |
+
+## Giai đoạn 7 — Sao lưu, bảo mật, chất lượng
+
+| ID | Công việc | Trạng thái |
+|---|---|---|
+| BACK-001 | Xuất backup JSON có schemaVersion | TODO |
+| BACK-002 | Restore preview/validate/confirm | TODO |
+| BACK-003 | Export Excel dữ liệu chính | TODO |
+| SEC-001 | Hoàn thiện Firebase Rules cho node mới | TODO |
+| QA-001 | Responsive điện thoại/tablet/PC | TODO |
+| QA-002 | Touch target + camera permission + rotate screen | TODO |
+| QA-003 | Test luồng kho xuyên module | TODO |
+| QA-004 | Test sai mạng/mất mạng/lỗi Firebase | TODO |
+| QA-005 | Regression trước release | TODO |
+
+## Tiêu chuẩn responsive bắt buộc
+
+Mọi module phải:
+- Chạy tốt ở điện thoại từ khoảng 320 px chiều rộng, tablet và PC.
+- Không bắt người dùng cuộn ngang cả trang; bảng lớn phải có card/mobile layout hoặc vùng cuộn cục bộ hợp lý.
+- Nút thao tác chính đủ lớn cho cảm ứng (mục tiêu tối thiểu khoảng 44 px chiều cao/vùng chạm).
+- Form dùng được với bàn phím điện thoại, input number/tel/search phù hợp.
+- Camera scanner hoạt động qua HTTPS trên domain thật, có fallback/chỉ dẫn quyền camera.
+- In tem có CSS `@media print` riêng, không phụ thuộc kích thước màn hình.
+- Loading/error/empty state rõ ràng.
 
 ## Quy tắc nhận việc cho AI module
 
-Khi giao một nhiệm vụ, AI trung tâm sẽ cung cấp tối thiểu:
-
+Mỗi chat/module phải nhận:
 1. Task ID.
-2. Module/phạm vi file được sửa.
-3. Tiêu chí hoàn thành.
-4. Những interface/schema phải tuân thủ.
-5. Những file không được sửa.
+2. Branch riêng.
+3. Phạm vi file được phép sửa.
+4. Schema/interface phải tuân thủ.
+5. File cấm sửa nếu không được AI trung tâm cho phép.
 
-AI module phải báo lại các file đã thay đổi, quyết định kỹ thuật đáng chú ý, cách kiểm thử và các vấn đề còn tồn tại.
+AI module không tự sửa `DATABASE_SCHEMA.md`, `PROJECT_RULES.md`, Firebase rules, shared types hoặc router tổng nếu nhiệm vụ không cho phép.
 
 ## Quyết định triển khai frontend
 
-- Dự án **không dùng Firebase Hosting**.
-- Frontend được build ra `dist/` và sau này người dùng tự đưa lên hosting/domain riêng.
-- Firebase chỉ dùng cho Authentication + Realtime Database.
-- Không chặn tiến độ phát triển module vì website chưa được đưa lên hosting.
+- Không dùng Firebase Hosting.
+- Build thành `dist/` và sau này người dùng tự đưa lên hosting/domain riêng.
+- Firebase dùng Authentication + Realtime Database.
+- Mọi camera feature trên website thật phải chạy HTTPS.
 
-## Việc ưu tiên tiếp theo
+## Thứ tự ưu tiên
 
-1. `INV-001` + `INV-002`: màn hình tồn kho và stock movement service.
-2. Sau đó triển khai Nhập hàng.
-3. Tiếp theo triển khai Bán hàng/POS.
-4. Khi người dùng sẵn sàng chạy website/local app, kiểm tra bootstrap owner và đóng `AUTH-002`.
+### Có thể làm song song ngay
+1. Chat Kho: `INV-001/002/003`, sau đó `PUR`, `OUT`, `STK`.
+2. Chat CRM: `CUST`, `SUP`, `EXP`.
+3. Chat QR/In tem: `QR`, `BAR`, `PRINT`.
+
+### Chỉ bắt đầu sau khi Inventory core merge
+4. Chat Bán hàng: `SALE-*`.
+
+### Sau khi giao dịch chính ổn định
+5. Chat Báo cáo/Backup/QA: `REP`, `BACK`, `SEC`, `QA`.
+
+AI trung tâm giữ quyền review/merge và giải quyết xung đột giữa các PR.
