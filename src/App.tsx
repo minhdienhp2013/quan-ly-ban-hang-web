@@ -1,33 +1,79 @@
-import { firebaseReady, realtimeDatabaseReady } from './firebase/client';
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
+import { AuthProvider } from './auth/AuthContext';
+import { RequireAuth } from './auth/RequireAuth';
+import { RequireOwner } from './auth/RequireOwner';
+import AppLayout from './layout/AppLayout';
+import DashboardPage from './pages/DashboardPage';
+import LoginPage from './pages/LoginPage';
+import ModulePlaceholderPage from './pages/ModulePlaceholderPage';
 
-function StatusBadge({ ok, label }: { ok: boolean; label: string }) {
-  return <span className={ok ? 'status status--ok' : 'status status--pending'}>{label}</span>;
-}
+const modulePages = {
+  products: ['Sản phẩm', 'Quản lý sản phẩm, danh mục, mã SKU, barcode/QR, giá và trạng thái.'],
+  sales: ['Bán hàng', 'Màn hình POS, giỏ hàng, thanh toán và lịch sử đơn bán.'],
+  purchases: ['Nhập hàng', 'Tạo phiếu nhập, cập nhật giá vốn và tăng tồn kho.'],
+  inventory: ['Kho', 'Theo dõi tồn kho và nhật ký biến động hàng hóa.'],
+  stocktakes: ['Kiểm kê', 'Kiểm kê thực tế, chênh lệch và điều chỉnh tồn kho có truy vết.'],
+  'qr-printing': ['QR & In tem', 'Quét QR bằng camera, tạo mã và in tem trên trình duyệt.'],
+  reports: ['Báo cáo', 'Doanh thu, giá vốn, lợi nhuận và báo cáo tồn kho theo thời gian.'],
+  users: ['Người dùng', 'Quản lý nhân viên, trạng thái tài khoản và quyền truy cập.'],
+  settings: ['Cài đặt', 'Thông tin cửa hàng và cấu hình mặc định của hệ thống.'],
+} as const;
 
 export default function App() {
   return (
-    <main className="app-shell">
-      <section className="hero-card">
-        <p className="eyebrow">Dự án quản lý bán hàng</p>
-        <h1>Hệ thống đã khởi động</h1>
-        <p className="lead">
-          Bộ khung React + TypeScript + Vite đã sẵn sàng. Bước tiếp theo là hoàn thiện
-          Firebase Realtime Database, đăng nhập và giao diện quản trị.
-        </p>
+    <BrowserRouter>
+      <AuthProvider>
+        <Routes>
+          <Route path="/login" element={<LoginPage />} />
 
-        <div className="status-grid" aria-label="Trạng thái nền tảng">
-          <StatusBadge ok={true} label="React / Vite: sẵn sàng" />
-          <StatusBadge ok={firebaseReady} label="Firebase App: đã cấu hình" />
-          <StatusBadge
-            ok={realtimeDatabaseReady}
-            label={
-              realtimeDatabaseReady
-                ? 'Realtime Database: sẵn sàng'
-                : 'Realtime Database: chờ databaseURL'
-            }
-          />
-        </div>
-      </section>
-    </main>
+          <Route element={<RequireAuth />}>
+            <Route element={<AppLayout />}>
+              <Route index element={<DashboardPage />} />
+              <Route
+                path="products"
+                element={<ModulePlaceholderPage title={modulePages.products[0]} description={modulePages.products[1]} />}
+              />
+              <Route
+                path="sales"
+                element={<ModulePlaceholderPage title={modulePages.sales[0]} description={modulePages.sales[1]} />}
+              />
+              <Route
+                path="purchases"
+                element={<ModulePlaceholderPage title={modulePages.purchases[0]} description={modulePages.purchases[1]} />}
+              />
+              <Route
+                path="inventory"
+                element={<ModulePlaceholderPage title={modulePages.inventory[0]} description={modulePages.inventory[1]} />}
+              />
+              <Route
+                path="stocktakes"
+                element={<ModulePlaceholderPage title={modulePages.stocktakes[0]} description={modulePages.stocktakes[1]} />}
+              />
+              <Route
+                path="qr-printing"
+                element={<ModulePlaceholderPage title={modulePages['qr-printing'][0]} description={modulePages['qr-printing'][1]} />}
+              />
+              <Route
+                path="reports"
+                element={<ModulePlaceholderPage title={modulePages.reports[0]} description={modulePages.reports[1]} />}
+              />
+
+              <Route element={<RequireOwner />}>
+                <Route
+                  path="users"
+                  element={<ModulePlaceholderPage title={modulePages.users[0]} description={modulePages.users[1]} />}
+                />
+                <Route
+                  path="settings"
+                  element={<ModulePlaceholderPage title={modulePages.settings[0]} description={modulePages.settings[1]} />}
+                />
+              </Route>
+            </Route>
+          </Route>
+
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </AuthProvider>
+    </BrowserRouter>
   );
 }

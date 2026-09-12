@@ -6,7 +6,7 @@ Tài liệu này dùng để AI trung tâm phân việc cho các AI/đoạn chat
 
 - `TODO`: chưa bắt đầu.
 - `IN_PROGRESS`: đang thực hiện.
-- `REVIEW`: chờ AI trung tâm kiểm tra.
+- `REVIEW`: chờ AI trung tâm kiểm tra hoặc bước triển khai cuối.
 - `BLOCKED`: bị chặn bởi quyết định/phụ thuộc khác.
 - `DONE`: đã hoàn thành và được chấp nhận.
 
@@ -18,20 +18,20 @@ Tài liệu này dùng để AI trung tâm phân việc cho các AI/đoạn chat
 | CORE-002 | Xác lập kiến trúc ban đầu | Docs | DONE | `ARCHITECTURE.md` |
 | CORE-003 | Xác lập schema Firebase ban đầu | Docs | DONE | `DATABASE_SCHEMA.md` |
 | CORE-004 | Tạo bộ khung React + TypeScript + Vite | Core | DONE | PR #1, CI build thành công |
-| CORE-005 | Cấu hình Firebase Web qua env | Core | DONE | Firebase App/Auth + Realtime Database URL đã xác nhận; giá trị runtime không commit trực tiếp |
-| CORE-006 | Tạo routing/layout chung | Core/UI | TODO | Desktop + mobile |
-| CORE-007 | Thiết lập types dùng chung | Core | TODO | Bám schema |
+| CORE-005 | Cấu hình Firebase Web qua env | Core | DONE | Firebase App/Auth + Realtime Database URL đã xác nhận |
+| CORE-006 | Tạo routing/layout chung | Core/UI | REVIEW | Desktop + mobile, chờ CI/merge |
+| CORE-007 | Thiết lập types dùng chung | Core | REVIEW | Bám `DATABASE_SCHEMA.md`, chờ CI/merge |
 
 ## Giai đoạn 1 — Đăng nhập và sản phẩm
 
-| ID | Công việc | Phạm vi | Trạng thái |
-|---|---|---|---|
-| AUTH-001 | Đăng nhập Firebase Authentication | `auth` | TODO |
-| AUTH-002 | Role owner/staff | `auth`, rules | TODO |
-| PROD-001 | Danh sách sản phẩm | `products` | TODO |
-| PROD-002 | Thêm/sửa sản phẩm | `products` | TODO |
-| PROD-003 | Tìm theo SKU/barcode/QR | `products` | TODO |
-| PROD-004 | Import danh sách sản phẩm từ Excel | `excel`, `products` | TODO |
+| ID | Công việc | Phạm vi | Trạng thái | Ghi chú |
+|---|---|---|---|---|
+| AUTH-001 | Đăng nhập Firebase Authentication | `auth` | REVIEW | Email/Password + protected routes, chờ CI/merge |
+| AUTH-002 | Role owner/staff | `auth`, rules | REVIEW | Owner UID đã neo; rules đã có trong repo, còn bước deploy Rules lên Firebase |
+| PROD-001 | Danh sách sản phẩm | `products` | TODO | Bắt đầu sau khi auth/rules ổn định |
+| PROD-002 | Thêm/sửa sản phẩm | `products` | TODO | |
+| PROD-003 | Tìm theo SKU/barcode/QR | `products` | TODO | |
+| PROD-004 | Import danh sách sản phẩm từ Excel | `excel`, `products` | TODO | |
 
 ## Giai đoạn 2 — Kho
 
@@ -86,4 +86,8 @@ AI module phải báo lại các file đã thay đổi, quyết định kỹ thu
 
 ## Việc ưu tiên tiếp theo
 
-Thực hiện `CORE-006` và `CORE-007`, sau đó triển khai `AUTH-001`/`AUTH-002`. Khi nền tảng đăng nhập và quyền truy cập ổn định mới chia song song các module sản phẩm, kho, bán hàng, QR/in tem và báo cáo.
+1. Chạy CI cho nhánh `feature/core-routing-types-auth`.
+2. Review/merge routing, shared types và auth.
+3. Deploy `database.rules.json` lên Firebase Realtime Database.
+4. Đăng nhập lần đầu bằng tài khoản owner để bootstrap `/users/{ownerUid}`.
+5. Sau khi auth/rules ổn định, bắt đầu `PROD-001` và `PROD-002`.
