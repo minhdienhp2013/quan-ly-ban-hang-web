@@ -27,7 +27,7 @@ Tài liệu này là quy tắc chung cho mọi AI, đoạn chat và người ph�
 - Frontend: React + TypeScript + Vite.
 - Firebase Authentication cho đăng nhập.
 - Firebase Realtime Database cho dữ liệu nghiệp vụ ban đầu.
-- Firebase Hosting hoặc hosting tĩnh tương thích SPA.
+- Frontend được build thành static assets và đưa lên hosting/domain riêng của người dùng; không phụ thuộc Firebase Hosting.
 - Ứng dụng phải chạy trên trình duyệt máy tính và điện thoại.
 
 Không tự đổi framework hoặc database chính nếu chưa có quyết định kiến trúc được ghi vào `ARCHITECTURE.md`.
