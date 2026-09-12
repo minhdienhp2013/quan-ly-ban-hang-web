@@ -21,14 +21,15 @@ Tài liệu này dùng để AI trung tâm phân việc cho các AI/đoạn chat
 | CORE-005 | Cấu hình Firebase Web qua env | Core | DONE | Firebase App/Auth + Realtime Database URL đã xác nhận |
 | CORE-006 | Tạo routing/layout chung | Core/UI | DONE | PR #2, responsive desktop + mobile, CI xanh |
 | CORE-007 | Thiết lập types dùng chung | Core | DONE | PR #2, bám `DATABASE_SCHEMA.md` |
+| HOST-001 | Deploy SPA lên Firebase Hosting | Hosting | IN_PROGRESS | Dùng Cloud Shell/CLI, sau đó đăng nhập owner lần đầu |
 
 ## Giai đoạn 1 — Đăng nhập và sản phẩm
 
 | ID | Công việc | Phạm vi | Trạng thái | Ghi chú |
 |---|---|---|---|---|
 | AUTH-001 | Đăng nhập Firebase Authentication | `auth` | DONE | Email/Password + protected routes, PR #2 |
-| AUTH-002 | Role owner/staff | `auth`, rules | REVIEW | Code/rules đã merge; còn deploy Rules và bootstrap owner lần đầu |
-| PROD-001 | Danh sách sản phẩm | `products` | TODO | Bắt đầu sau khi auth/rules ổn định |
+| AUTH-002 | Role owner/staff | `auth`, rules | REVIEW | Rules đã Publish; còn bootstrap `/users/{ownerUid}` bằng lần đăng nhập owner đầu tiên |
+| PROD-001 | Danh sách sản phẩm | `products` | TODO | Bắt đầu sau khi owner bootstrap thành công |
 | PROD-002 | Thêm/sửa sản phẩm | `products` | TODO | |
 | PROD-003 | Tìm theo SKU/barcode/QR | `products` | TODO | |
 | PROD-004 | Import danh sách sản phẩm từ Excel | `excel`, `products` | TODO | |
@@ -86,8 +87,7 @@ AI module phải báo lại các file đã thay đổi, quyết định kỹ thu
 
 ## Việc ưu tiên tiếp theo
 
-1. Deploy `database.rules.json` lên Firebase Realtime Database.
+1. Deploy bản build lên Firebase Hosting (`HOST-001`).
 2. Đăng nhập lần đầu bằng tài khoản owner để bootstrap `/users/{ownerUid}`.
-3. Xác nhận owner truy cập thành công và Rules chặn người chưa được cấp quyền.
-4. Đánh dấu `AUTH-002` DONE.
-5. Bắt đầu `PROD-001` và `PROD-002`.
+3. Xác nhận owner truy cập thành công; đánh dấu `AUTH-002` và `HOST-001` DONE.
+4. Bắt đầu `PROD-001` và `PROD-002` trên branch riêng.
