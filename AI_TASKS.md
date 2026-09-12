@@ -17,8 +17,8 @@ Tài liệu này dùng để AI trung tâm phân việc cho các AI/đoạn chat
 | CORE-001 | Xác lập quy tắc dự án | Docs | DONE | `PROJECT_RULES.md` |
 | CORE-002 | Xác lập kiến trúc ban đầu | Docs | DONE | `ARCHITECTURE.md` |
 | CORE-003 | Xác lập schema Firebase ban đầu | Docs | DONE | `DATABASE_SCHEMA.md` |
-| CORE-004 | Tạo bộ khung React + TypeScript + Vite | Core | TODO | Việc tiếp theo |
-| CORE-005 | Cấu hình Firebase Web qua env | Core | TODO | Không commit secret |
+| CORE-004 | Tạo bộ khung React + TypeScript + Vite | Core | REVIEW | PR #1, chờ CI/build |
+| CORE-005 | Cấu hình Firebase Web qua env | Core | BLOCKED | Đã có Firebase App/Auth; chờ `databaseURL` của Realtime Database |
 | CORE-006 | Tạo routing/layout chung | Core/UI | TODO | Desktop + mobile |
 | CORE-007 | Thiết lập types dùng chung | Core | TODO | Bám schema |
 
@@ -86,4 +86,4 @@ AI module phải báo lại các file đã thay đổi, quyết định kỹ thu
 
 ## Việc ưu tiên tiếp theo
 
-`CORE-004`: dựng bộ khung ứng dụng React + TypeScript + Vite. Sau đó thực hiện `CORE-005`, `CORE-006`, `CORE-007` trước khi chia các module nghiệp vụ lớn cho nhiều AI song song.
+Hoàn tất `CORE-005` bằng cách lấy `databaseURL` của Firebase Realtime Database. Sau khi PR #1 qua build, merge `CORE-004/005` rồi thực hiện `CORE-006` và `CORE-007` trước khi chia các module nghiệp vụ lớn cho nhiều AI song song.
