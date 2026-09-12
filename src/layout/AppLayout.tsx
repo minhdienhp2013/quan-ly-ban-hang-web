@@ -10,10 +10,13 @@ type NavigationItem = {
 const navigation: NavigationItem[] = [
   { to: '/', label: 'Tổng quan' },
   { to: '/products', label: 'Sản phẩm' },
+  { to: '/customers', label: 'Khách hàng' },
+  { to: '/suppliers', label: 'Nhà cung cấp' },
   { to: '/sales', label: 'Bán hàng' },
   { to: '/purchases', label: 'Nhập hàng' },
   { to: '/inventory', label: 'Kho' },
   { to: '/stocktakes', label: 'Kiểm kê' },
+  { to: '/expenses', label: 'Chi phí', ownerOnly: true },
   { to: '/qr-printing', label: 'QR & In tem' },
   { to: '/reports', label: 'Báo cáo' },
   { to: '/users', label: 'Người dùng', ownerOnly: true },

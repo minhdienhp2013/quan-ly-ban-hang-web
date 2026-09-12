@@ -3,10 +3,13 @@ import { AuthProvider } from './auth/AuthContext';
 import { RequireAuth } from './auth/RequireAuth';
 import { RequireOwner } from './auth/RequireOwner';
 import AppLayout from './layout/AppLayout';
+import CustomersPage from './modules/customers/CustomersPage';
+import ExpensesPage from './modules/expenses/ExpensesPage';
 import ProductsWorkspacePage from './modules/products/ProductsWorkspacePage';
 import './modules/products/products.css';
 import QrPrintingPage from './modules/qr/QrPrintingPage';
 import SalesPage from './modules/sales/SalesPage';
+import SuppliersPage from './modules/suppliers/SuppliersPage';
 import DashboardPage from './pages/DashboardPage';
 import LoginPage from './pages/LoginPage';
 import ModulePlaceholderPage from './pages/ModulePlaceholderPage';
@@ -31,6 +34,8 @@ export default function App() {
             <Route element={<AppLayout />}>
               <Route index element={<DashboardPage />} />
               <Route path="products" element={<ProductsWorkspacePage />} />
+              <Route path="customers" element={<CustomersPage />} />
+              <Route path="suppliers" element={<SuppliersPage />} />
               <Route path="sales" element={<SalesPage />} />
               <Route
                 path="purchases"
@@ -51,6 +56,7 @@ export default function App() {
               />
 
               <Route element={<RequireOwner />}>
+                <Route path="expenses" element={<ExpensesPage />} />
                 <Route
                   path="users"
                   element={<ModulePlaceholderPage title={modulePages.users[0]} description={modulePages.users[1]} />}
