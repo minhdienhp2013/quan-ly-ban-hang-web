@@ -21,6 +21,7 @@ export interface Product {
   costPrice: number;
   salePrice: number;
   stockQuantity: number;
+  stockVersion?: number;
   minStock?: number;
   active: boolean;
   createdAt: number;
@@ -172,6 +173,15 @@ export interface StockMovement {
   createdAt: number;
 }
 
+export interface StockOperationReceipt {
+  id: string;
+  type: StockMovementType;
+  referenceType: StockReferenceType;
+  referenceId: string;
+  actorUid: string;
+  createdAt: number;
+}
+
 export interface StocktakeItem {
   productId: string;
   systemQuantity: number;
@@ -235,6 +245,7 @@ export interface BackupEnvelope {
     purchases?: Record<string, Purchase>;
     stockOuts?: Record<string, StockOut>;
     stockMovements?: Record<string, StockMovement>;
+    stockOperations?: Record<string, StockOperationReceipt>;
     stocktakes?: Record<string, Stocktake>;
     expenses?: Record<string, Expense>;
     settings?: StoreSettings;
