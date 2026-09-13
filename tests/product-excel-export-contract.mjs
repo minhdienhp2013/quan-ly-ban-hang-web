@@ -1,34 +1,11 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { createRequire } from 'node:module';
 import test from 'node:test';
 import * as XLSX from 'xlsx';
 
-const require = createRequire(import.meta.url);
-const typescript = require('typescript');
-const transpileModule = typescript.transpileModule ?? typescript.default?.transpileModule;
 const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
-
-function loadTsModule(path) {
-  assert.equal(typeof transpileModule, 'function', 'TypeScript transpileModule must be available');
-  const source = read(path);
-  const output = transpileModule(source, {
-    compilerOptions: {
-      module: 1,
-      target: 9,
-      esModuleInterop: true,
-    },
-    fileName: path,
-  }).outputText;
-
-  const module = { exports: {} };
-  const execute = new Function('require', 'module', 'exports', output);
-  execute(require, module, module.exports);
-  return module.exports;
-}
-
-const exportModule = loadTsModule('src/modules/products/productExcelExport.ts');
-const importModule = loadTsModule('src/modules/products/excelImport.ts');
+const exportModule = await import(new URL('../src/modules/products/productExcelExport.ts', import.meta.url));
+const importModule = await import(new URL('../src/modules/products/excelImport.ts', import.meta.url));
 const {
   PRODUCT_EXCEL_FORMAT,
   PRODUCT_EXCEL_HEADERS,
