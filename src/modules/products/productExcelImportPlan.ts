@@ -1,5 +1,9 @@
 import type { Product } from '../../types/models';
-import type { ExcelProductImportRow } from './excelImport';
+import type {
+  ExcelProductImportRow,
+  ExcelProductMetadataField,
+} from './excelImport';
+import type { ProductInput } from './productService';
 
 export type ProductExcelDuplicateMode = 'skip' | 'update';
 
@@ -25,6 +29,49 @@ export function getMatchedProduct(
 ): Product | undefined {
   if (!row.matchedProductId) return undefined;
   return products.find((product) => product.id === row.matchedProductId);
+}
+
+function hasProvidedMetadataField(
+  row: ExcelProductImportRow,
+  field: ExcelProductMetadataField,
+) {
+  return row.presentFields.includes(field)
+    && Object.prototype.hasOwnProperty.call(row.metadataPatch, field);
+}
+
+export function buildDuplicateProductUpdateInput(
+  existing: Product,
+  row: ExcelProductImportRow,
+): ProductInput {
+  const patch = row.metadataPatch;
+
+  return {
+    sku: existing.sku,
+    name: hasProvidedMetadataField(row, 'name') && typeof patch.name === 'string'
+      ? patch.name
+      : existing.name,
+    barcode: hasProvidedMetadataField(row, 'barcode') && typeof patch.barcode === 'string'
+      ? patch.barcode
+      : existing.barcode,
+    qrCode: hasProvidedMetadataField(row, 'qrCode') && typeof patch.qrCode === 'string'
+      ? patch.qrCode
+      : existing.qrCode,
+    unit: hasProvidedMetadataField(row, 'unit') && typeof patch.unit === 'string'
+      ? patch.unit
+      : existing.unit,
+    costPrice: hasProvidedMetadataField(row, 'costPrice') && typeof patch.costPrice === 'number'
+      ? patch.costPrice
+      : existing.costPrice,
+    salePrice: hasProvidedMetadataField(row, 'salePrice') && typeof patch.salePrice === 'number'
+      ? patch.salePrice
+      : existing.salePrice,
+    minStock: hasProvidedMetadataField(row, 'minStock') && typeof patch.minStock === 'number'
+      ? patch.minStock
+      : existing.minStock,
+    active: hasProvidedMetadataField(row, 'active') && typeof patch.active === 'boolean'
+      ? patch.active
+      : existing.active,
+  };
 }
 
 export function getExcelStockPreview(
