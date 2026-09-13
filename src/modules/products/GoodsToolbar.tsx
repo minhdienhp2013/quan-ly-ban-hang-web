@@ -4,12 +4,15 @@ interface GoodsToolbarProps {
   query: string;
   importOpen: boolean;
   filtersOpen: boolean;
+  showExportExcel: boolean;
+  exportDisabled?: boolean;
   onQueryChange: (value: string) => void;
   onSubmitSearch: () => void;
   onClearSearch: () => void;
   onOpenScanner: () => void;
   onToggleImport: () => void;
   onToggleFilters: () => void;
+  onExportExcel: () => void;
   onOpenPrinting: () => void;
   onCreate: () => void;
 }
@@ -18,12 +21,15 @@ export default function GoodsToolbar({
   query,
   importOpen,
   filtersOpen,
+  showExportExcel,
+  exportDisabled = false,
   onQueryChange,
   onSubmitSearch,
   onClearSearch,
   onOpenScanner,
   onToggleImport,
   onToggleFilters,
+  onExportExcel,
   onOpenPrinting,
   onCreate,
 }: GoodsToolbarProps) {
@@ -53,6 +59,9 @@ export default function GoodsToolbar({
         <button className="button button--secondary goods-touch" type="button" onClick={onOpenScanner}>Quét mã</button>
         <button className={`button button--secondary goods-touch${filtersOpen ? ' is-active' : ''}`} type="button" onClick={onToggleFilters}>Bộ lọc</button>
         <button className={`button button--secondary goods-touch${importOpen ? ' is-active' : ''}`} type="button" onClick={onToggleImport}>Import Excel</button>
+        {showExportExcel ? (
+          <button className="button button--secondary goods-touch" type="button" onClick={onExportExcel} disabled={exportDisabled}>Xuất Excel</button>
+        ) : null}
         <button className="button button--secondary goods-touch" type="button" onClick={onOpenPrinting}>In tem</button>
         <button className="button button--primary goods-touch goods-add-button" type="button" onClick={onCreate}>+ Thêm sản phẩm</button>
       </div>
