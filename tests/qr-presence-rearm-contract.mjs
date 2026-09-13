@@ -1,29 +1,10 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
-import * as tsNamespace from 'typescript';
-
-const ts = tsNamespace.default ?? tsNamespace;
 
 const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
+const { createPresenceRearmGate } = await import('../src/modules/qr/presenceRearm.ts');
 
-function loadPresenceModule() {
-  const source = read('src/modules/qr/presenceRearm.ts');
-  const output = ts.transpileModule(source, {
-    compilerOptions: {
-      module: ts.ModuleKind.CommonJS,
-      target: ts.ScriptTarget.ES2022,
-    },
-  }).outputText;
-  const module = { exports: {} };
-  const execute = new Function('exports', 'module', 'require', output);
-  execute(module.exports, module, () => {
-    throw new Error('presenceRearm.ts must not require runtime dependencies');
-  });
-  return module.exports;
-}
-
-const { createPresenceRearmGate } = loadPresenceModule();
 const code = (value, observedAt, engine = 'barcode-detector') => ({
   kind: 'codes',
   engine,
