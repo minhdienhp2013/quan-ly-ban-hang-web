@@ -1,7 +1,10 @@
 import type { Product, UserRole } from '../../types/models';
 import { commitStockOperation, getProductsOnce } from '../inventory/inventoryService';
 import type { ExcelProductImportRow } from './excelImport';
-import type { ProductExcelDuplicateMode } from './productExcelImportPlan';
+import {
+  buildDuplicateProductUpdateInput,
+  type ProductExcelDuplicateMode,
+} from './productExcelImportPlan';
 import { createProduct, updateProduct } from './productService';
 
 const STOCK_NOTE = 'Điều chỉnh tồn từ Product Excel Import';
@@ -195,14 +198,8 @@ export async function runProductExcelImport(
 
     try {
       const existing = await readProductById(row.matchedProductId);
-      await updateProduct(
-        existing,
-        {
-          ...row.input,
-          sku: existing.sku,
-        },
-        input.actorUid,
-      );
+      const updateInput = buildDuplicateProductUpdateInput(existing, row);
+      await updateProduct(existing, updateInput, input.actorUid);
       metadataUpdated.add(row.rowNumber);
       progress.metadataUpdatedRows = [...metadataUpdated];
       updated += 1;
