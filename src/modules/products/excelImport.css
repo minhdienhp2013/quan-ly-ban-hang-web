@@ -50,6 +50,51 @@
   background: #ffffff;
 }
 
+.excel-import-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 22px;
+  margin: 16px 0 12px;
+  padding: 14px 16px;
+  border: 1px solid #dfe5ed;
+  border-radius: 10px;
+}
+
+.excel-import-options legend {
+  padding: 0 6px;
+  font-weight: 700;
+}
+
+.excel-import-options label,
+.excel-stock-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.excel-import-options input,
+.excel-stock-option input {
+  margin-top: 3px;
+}
+
+.excel-stock-option {
+  margin: 12px 0 16px;
+  padding: 14px 16px;
+  border: 1px solid #dfe5ed;
+  border-radius: 10px;
+  background: #ffffff;
+}
+
+.excel-stock-option span {
+  display: grid;
+  gap: 4px;
+}
+
+.excel-stock-option small {
+  color: #687386;
+  line-height: 1.45;
+}
+
 .import-summary {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -112,6 +157,7 @@
   color: #8a6114;
 }
 
+.import-status--conflict,
 .import-status--error {
   color: #9a3030;
 }
@@ -124,5 +170,9 @@
 
   .import-summary {
     grid-template-columns: 1fr;
+  }
+
+  .excel-import-options {
+    flex-direction: column;
   }
 }

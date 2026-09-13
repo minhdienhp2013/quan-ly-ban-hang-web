@@ -184,7 +184,7 @@ test('Xuất Excel is owner-only and exports the full products source, not filte
   const pageSource = read('src/modules/products/ProductsPage.tsx');
   const toolbarSource = read('src/modules/products/GoodsToolbar.tsx');
   const handlerStart = pageSource.indexOf('function handleExportExcel');
-  const handlerEnd = pageSource.indexOf('\n  function printProducts', handlerStart);
+  const handlerEnd = pageSource.indexOf('\n  async function handleBulkDeactivate', handlerStart);
   const handler = pageSource.slice(handlerStart, handlerEnd);
 
   assert.match(toolbarSource, />Xuất Excel<\/button>/);

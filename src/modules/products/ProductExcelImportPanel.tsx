@@ -1,7 +1,18 @@
 import { useMemo, useRef, useState, type ChangeEvent } from 'react';
+import { useAuth } from '../../auth/AuthContext';
 import type { Product } from '../../types/models';
 import { parseProductExcel, type ExcelProductImportResult } from './excelImport';
-import { importProductsFromExcel } from './productImportService';
+import {
+  getExcelStockPreview,
+  summarizeProductExcelImport,
+  type ProductExcelDuplicateMode,
+} from './productExcelImportPlan';
+import {
+  createEmptyProductExcelImportProgress,
+  runProductExcelImport,
+  type ProductExcelImportProgress,
+  type ProductExcelImportRunResult,
+} from './productExcelImportWorkflow';
 
 interface ProductExcelImportPanelProps {
   products: Product[];
@@ -9,29 +20,59 @@ interface ProductExcelImportPanelProps {
   onClose: () => void;
 }
 
+function createImportSessionId() {
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function formatDelta(delta: number) {
+  if (delta > 0) return `+${delta}`;
+  return String(delta);
+}
+
 export default function ProductExcelImportPanel({
   products,
   actorUid,
   onClose,
 }: ProductExcelImportPanelProps) {
+  const { appUser } = useAuth();
+  const isOwner = appUser?.role === 'owner';
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [fileName, setFileName] = useState('');
   const [preview, setPreview] = useState<ExcelProductImportResult | null>(null);
+  const [duplicateMode, setDuplicateMode] = useState<ProductExcelDuplicateMode>('skip');
+  const [updateStock, setUpdateStock] = useState(false);
+  const [sessionId, setSessionId] = useState(createImportSessionId);
+  const [progress, setProgress] = useState<ProductExcelImportProgress>(createEmptyProductExcelImportProgress);
+  const [optionsLocked, setOptionsLocked] = useState(false);
+  const [runResult, setRunResult] = useState<ProductExcelImportRunResult | null>(null);
   const [reading, setReading] = useState(false);
   const [importing, setImporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  const stats = useMemo(() => {
-    if (!preview) return { ready: 0, duplicate: 0, error: 0 };
-    return preview.rows.reduce(
-      (result, row) => {
-        result[row.status] += 1;
-        return result;
-      },
-      { ready: 0, duplicate: 0, error: 0 },
-    );
-  }, [preview]);
+  const summary = useMemo(() => {
+    if (!preview) {
+      return {
+        newCount: 0,
+        duplicateCount: 0,
+        conflictCount: 0,
+        errorCount: 0,
+        updateCount: 0,
+        stockAdjustmentCount: 0,
+        skippedCount: 0,
+      };
+    }
+    return summarizeProductExcelImport(preview.rows, products, duplicateMode, updateStock);
+  }, [preview, products, duplicateMode, updateStock]);
+
+  function resetImportSession() {
+    setDuplicateMode('skip');
+    setUpdateStock(false);
+    setSessionId(createImportSessionId());
+    setProgress(createEmptyProductExcelImportProgress());
+    setOptionsLocked(false);
+    setRunResult(null);
+  }
 
   async function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
@@ -41,6 +82,7 @@ export default function ProductExcelImportPanel({
     setPreview(null);
     setError(null);
     setSuccess(null);
+    resetImportSession();
     setReading(true);
 
     try {
@@ -54,32 +96,81 @@ export default function ProductExcelImportPanel({
   }
 
   async function handleImport() {
-    if (!preview || importing) return;
+    if (!preview || importing || !appUser) return;
 
-    const readyInputs = preview.rows
-      .filter((row) => row.status === 'ready' && row.input)
-      .map((row) => row.input!);
-
-    if (readyInputs.length === 0) {
-      setError('Không có dòng hợp lệ nào để nhập.');
+    if (updateStock && !isOwner) {
+      setError('Chỉ chủ cửa hàng được cập nhật tồn kho từ file Excel.');
+      return;
+    }
+    if (updateStock && !preview.stockColumnDetected) {
+      setError('File không có cột Tồn kho.');
       return;
     }
 
-    const confirmed = window.confirm(
-      `Nhập ${readyInputs.length} sản phẩm mới? Các dòng trùng và dòng lỗi sẽ được bỏ qua.`,
-    );
+    const errorCount = summary.errorCount + summary.conflictCount;
+    const hasAction =
+      summary.newCount > 0 ||
+      summary.updateCount > 0 ||
+      (updateStock && summary.stockAdjustmentCount > 0);
+    if (!hasAction) {
+      setError('Không có thay đổi hợp lệ nào để thực hiện với lựa chọn hiện tại.');
+      return;
+    }
+
+    const lines = [
+      `Tạo mới: ${summary.newCount}`,
+      `Cập nhật hàng trùng: ${summary.updateCount}`,
+      `Điều chỉnh tồn kho: ${summary.stockAdjustmentCount}`,
+      `Bỏ qua: ${summary.skippedCount}`,
+      `Lỗi/conflict: ${errorCount}`,
+    ];
+    if (updateStock && summary.stockAdjustmentCount > 0) {
+      lines.push('', 'Tồn kho sẽ được điều chỉnh theo số lượng trong file Excel và sẽ tạo lịch sử kho.');
+    }
+
+    const confirmed = window.confirm(lines.join('\n'));
     if (!confirmed) return;
 
     setImporting(true);
+    setOptionsLocked(true);
     setError(null);
     setSuccess(null);
 
     try {
-      const count = await importProductsFromExcel(readyInputs, actorUid);
-      setSuccess(`Đã nhập thành công ${count} sản phẩm.`);
-      setPreview(null);
-      setFileName('');
-      if (fileInputRef.current) fileInputRef.current.value = '';
+      const result = await runProductExcelImport({
+        rows: preview.rows,
+        actorUid,
+        actorRole: appUser.role,
+        duplicateMode,
+        updateStock,
+        stockColumnDetected: preview.stockColumnDetected,
+        sessionId,
+        progress,
+      });
+      setProgress(result.progress);
+      setRunResult(result);
+
+      const resultText = [
+        `Product tạo mới thành công: ${result.created}`,
+        `Product cập nhật thành công: ${result.updated}`,
+        `Stock adjustment thành công: ${result.stockAdjusted}`,
+        `Tồn kho không đổi: ${result.stockUnchanged}`,
+        `Hàng trùng bỏ qua metadata: ${result.skippedDuplicates}`,
+      ].join(' · ');
+
+      if (result.failures.length > 0) {
+        setError(`${resultText}. Còn ${result.failures.length} thao tác thất bại; có thể thử lại cùng phiên import.`);
+      } else {
+        setSuccess(resultText);
+        setPreview(null);
+        setFileName('');
+        setOptionsLocked(false);
+        setProgress(createEmptyProductExcelImportProgress());
+        setDuplicateMode('skip');
+        setUpdateStock(false);
+        setSessionId(createImportSessionId());
+        if (fileInputRef.current) fileInputRef.current.value = '';
+      }
     } catch (importError) {
       setError(importError instanceof Error ? importError.message : 'Không thể import sản phẩm.');
     } finally {
@@ -93,7 +184,7 @@ export default function ProductExcelImportPanel({
         <div>
           <h2>Import sản phẩm bằng Excel</h2>
           <p>
-            File mẫu chỉ là tham khảo. Hệ thống nhận các tên cột phổ biến và chỉ bắt buộc có Mã hàng/SKU + Tên sản phẩm.
+            Hỗ trợ tạo mới, bỏ qua hoặc cập nhật hàng trùng. Tồn kho chỉ thay đổi khi OWNER chủ động bật tùy chọn riêng.
           </p>
         </div>
         <button className="button button--secondary" type="button" onClick={onClose} disabled={importing}>
@@ -103,7 +194,7 @@ export default function ProductExcelImportPanel({
 
       <div className="excel-import-help">
         <strong>Cột hỗ trợ:</strong>
-        <span>Mã hàng/SKU, Tên sản phẩm, Barcode, QR, Đơn vị, Giá vốn, Giá bán, Tồn tối thiểu, Trạng thái.</span>
+        <span>Mã hàng/SKU, Tên sản phẩm, Barcode, QR, Đơn vị, Giá vốn, Giá bán, Tồn tối thiểu, Tồn kho, Trạng thái.</span>
         <span>Các cột khác trong file được phép tồn tại và sẽ được bỏ qua.</span>
       </div>
 
@@ -123,23 +214,79 @@ export default function ProductExcelImportPanel({
       {error && <p className="form-error">{error}</p>}
       {success && <p className="form-success">{success}</p>}
 
+      {runResult?.failures.length ? (
+        <div className="excel-import-help" role="status">
+          <strong>Chi tiết thao tác thất bại</strong>
+          {runResult.failures.slice(0, 20).map((failure) => (
+            <span key={`${failure.rowNumber}-${failure.stage}`}>
+              Dòng {failure.rowNumber} · {failure.stage}: {failure.message}
+            </span>
+          ))}
+          {runResult.failures.length > 20 ? <span>... và {runResult.failures.length - 20} lỗi khác.</span> : null}
+        </div>
+      ) : null}
+
       {preview && (
         <>
+          <fieldset className="excel-import-options" disabled={importing || optionsLocked}>
+            <legend>Xử lý hàng trùng</legend>
+            <label>
+              <input
+                type="radio"
+                name="duplicate-mode"
+                checked={duplicateMode === 'skip'}
+                onChange={() => setDuplicateMode('skip')}
+              />
+              Bỏ qua hàng trùng
+            </label>
+            <label>
+              <input
+                type="radio"
+                name="duplicate-mode"
+                checked={duplicateMode === 'update'}
+                onChange={() => setDuplicateMode('update')}
+              />
+              Cập nhật hàng trùng
+            </label>
+          </fieldset>
+
+          {isOwner ? (
+            <label className="excel-stock-option">
+              <input
+                type="checkbox"
+                checked={updateStock}
+                onChange={(event) => setUpdateStock(event.target.checked)}
+                disabled={importing || optionsLocked}
+              />
+              <span>
+                <strong>Cập nhật tồn kho theo file Excel</strong>
+                <small>Tồn kho trong Excel được hiểu là tồn mục tiêu; mọi chênh lệch đi qua lịch sử kho/CAS.</small>
+              </span>
+            </label>
+          ) : null}
+
+          {updateStock && !preview.stockColumnDetected ? (
+            <p className="form-warning">File không có cột Tồn kho.</p>
+          ) : null}
+
           <div className="import-summary">
-            <div><span>Sẵn sàng nhập</span><strong>{stats.ready}</strong></div>
-            <div><span>Dòng trùng</span><strong>{stats.duplicate}</strong></div>
-            <div><span>Dòng lỗi</span><strong>{stats.error}</strong></div>
+            <div><span>Sản phẩm mới</span><strong>{summary.newCount}</strong></div>
+            <div><span>Hàng trùng</span><strong>{summary.duplicateCount}</strong></div>
+            <div><span>Hàng lỗi</span><strong>{summary.errorCount}</strong></div>
+            <div><span>Hàng conflict</span><strong>{summary.conflictCount}</strong></div>
+            <div><span>Product sẽ cập nhật</span><strong>{summary.updateCount}</strong></div>
+            <div><span>Tồn kho sẽ điều chỉnh</span><strong>{summary.stockAdjustmentCount}</strong></div>
           </div>
 
           <p className="muted">
             Sheet: <strong>{preview.sheetName}</strong> · Đã nhận {preview.detectedHeaders.length} cột.
           </p>
 
-          {preview.stockColumnDetected && (
+          {preview.stockColumnDetected && !updateStock ? (
             <p className="form-warning">
-              File có cột tồn kho. Ở bước này hệ thống chưa ghi số tồn từ Excel để tránh làm sai lịch sử kho; tồn đầu kỳ sẽ được xử lý qua module Kho/kiểm kê.
+              File có cột Tồn kho nhưng tùy chọn cập nhật tồn đang TẮT. Tồn kho chỉ được dùng làm snapshot tham khảo và không thay đổi hệ thống.
             </p>
-          )}
+          ) : null}
 
           <div className="product-table-wrap import-preview-table-wrap">
             <table className="product-table import-preview-table">
@@ -149,23 +296,39 @@ export default function ProductExcelImportPanel({
                   <th>SKU</th>
                   <th>Tên sản phẩm</th>
                   <th>Giá bán</th>
-                  <th>Trạng thái</th>
+                  <th>Loại</th>
+                  {updateStock ? <th>Tồn hiện tại → Excel</th> : null}
                   <th>Kết quả kiểm tra</th>
                 </tr>
               </thead>
               <tbody>
-                {preview.rows.slice(0, 100).map((row) => (
-                  <tr key={row.rowNumber}>
-                    <td>{row.rowNumber}</td>
-                    <td>{row.input?.sku || '—'}</td>
-                    <td>{row.input?.name || '—'}</td>
-                    <td className="number-cell">{row.input ? row.input.salePrice.toLocaleString('vi-VN') : '—'}</td>
-                    <td>{row.input?.active === false ? 'Ngừng dùng' : 'Đang dùng'}</td>
-                    <td>
-                      <span className={`import-status import-status--${row.status}`}>{row.message}</span>
-                    </td>
-                  </tr>
-                ))}
+                {preview.rows.slice(0, 100).map((row) => {
+                  const stock = updateStock ? getExcelStockPreview(row, products) : null;
+                  const typeLabel = row.status === 'ready'
+                    ? 'Sản phẩm mới'
+                    : row.status === 'duplicate'
+                      ? 'Hàng trùng'
+                      : row.status === 'conflict'
+                        ? 'Conflict'
+                        : 'Lỗi';
+                  return (
+                    <tr key={row.rowNumber}>
+                      <td>{row.rowNumber}</td>
+                      <td>{row.input?.sku || '—'}</td>
+                      <td>{row.input?.name || '—'}</td>
+                      <td className="number-cell">{row.input ? row.input.salePrice.toLocaleString('vi-VN') : '—'}</td>
+                      <td>{typeLabel}</td>
+                      {updateStock ? (
+                        <td className="number-cell">
+                          {stock ? `${stock.current} → ${stock.target} (${formatDelta(stock.delta)})` : '—'}
+                        </td>
+                      ) : null}
+                      <td>
+                        <span className={`import-status import-status--${row.status}`}>{row.message}</span>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -175,11 +338,21 @@ export default function ProductExcelImportPanel({
           )}
 
           <div className="form-actions">
-            <button className="button button--secondary" type="button" onClick={() => fileInputRef.current?.click()} disabled={importing}>
+            <button
+              className="button button--secondary"
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={importing}
+            >
               Chọn file khác
             </button>
-            <button className="button button--primary" type="button" onClick={handleImport} disabled={importing || stats.ready === 0}>
-              {importing ? 'Đang nhập...' : `Nhập ${stats.ready} sản phẩm hợp lệ`}
+            <button
+              className="button button--primary"
+              type="button"
+              onClick={handleImport}
+              disabled={importing || (updateStock && !preview.stockColumnDetected)}
+            >
+              {importing ? 'Đang xử lý...' : optionsLocked ? 'Thử lại phần chưa hoàn tất' : 'Xác nhận import'}
             </button>
           </div>
         </>

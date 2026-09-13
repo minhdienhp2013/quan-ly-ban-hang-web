@@ -12,6 +12,7 @@ import GoodsTable from './GoodsTable';
 import GoodsToolbar from './GoodsToolbar';
 import ProductDetail from './ProductDetail';
 import ProductScanDialog from './ProductScanDialog';
+import { deactivateSelectedProducts } from './productBulkActions';
 import { exportProductsToExcel } from './productExcelExport';
 import {
   computeGoodsStats,
@@ -137,6 +138,7 @@ export default function ProductsPage() {
   const [formError, setFormError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [changingStatusId, setChangingStatusId] = useState<string | null>(null);
+  const [bulkDeactivating, setBulkDeactivating] = useState(false);
 
   useEffect(() => {
     setLoading(true);
@@ -306,6 +308,40 @@ export default function ProductsPage() {
     }
   }
 
+  async function handleBulkDeactivate() {
+    if (appUser?.role !== 'owner' || bulkDeactivating || selectedProducts.length === 0) return;
+
+    const confirmed = window.confirm(
+      `Bạn đang chuẩn bị ngừng kinh doanh ${selectedProducts.length} sản phẩm.\n\n` +
+      'Sản phẩm không bị xóa.\nLịch sử bán hàng và kho vẫn được giữ nguyên.\n\n' +
+      'Bạn có muốn tiếp tục?',
+    );
+    if (!confirmed) return;
+
+    setBulkDeactivating(true);
+    setSearchNotice(null);
+    setLoadError(null);
+    try {
+      const result = await deactivateSelectedProducts(
+        selectedProducts,
+        (product) => setProductActive(product, false, appUser.uid),
+      );
+
+      if (result.failures.length > 0) {
+        setSearchNotice(
+          `Đã xử lý ${result.deactivated}/${result.targeted} sản phẩm. ` +
+          `${result.failures.length} sản phẩm không thể cập nhật.`,
+        );
+      } else {
+        setSearchNotice(`Đã ngừng kinh doanh ${result.deactivated} sản phẩm.`);
+      }
+    } catch (error) {
+      setLoadError(error instanceof Error ? error.message : 'Không thể ngừng kinh doanh các sản phẩm đã chọn.');
+    } finally {
+      setBulkDeactivating(false);
+    }
+  }
+
   function printProducts(targetProducts: Product[]) {
     const initialQuantities = Object.fromEntries(targetProducts.map((product) => [product.id, 1]));
     navigate('/qr-printing', { state: { initialQuantities, source: 'products' } });
@@ -387,7 +423,14 @@ export default function ProductsPage() {
         />
 
         <section className="goods-panel" aria-label="Danh sách hàng hóa">
-          <GoodsBulkActionBar count={selectedProducts.length} onPrint={() => printProducts(selectedProducts)} onClear={() => setSelectedProductIds(new Set())} />
+          <GoodsBulkActionBar
+            count={selectedProducts.length}
+            showDeactivate={appUser?.role === 'owner'}
+            deactivating={bulkDeactivating}
+            onPrint={() => printProducts(selectedProducts)}
+            onDeactivate={() => void handleBulkDeactivate()}
+            onClear={() => setSelectedProductIds(new Set())}
+          />
 
           {loading ? (
             <div className="goods-empty">Đang tải hàng hóa...</div>
