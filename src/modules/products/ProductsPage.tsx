@@ -140,6 +140,7 @@ export default function ProductsPage() {
   useEffect(() => {
     setLoading(true);
     setLoadError(null);
+
     try {
       return subscribeProducts(
         (nextProducts) => {
@@ -147,7 +148,7 @@ export default function ProductsPage() {
           setLoading(false);
         },
         (error) => {
-          setLoadError(error.message || 'Không thể tải danh sách hồi hhóa.');
+          setLoadError(error.message || 'Không thể tải danh sách hàng hóa.');
           setLoading(false);
         },
       );
@@ -207,6 +208,7 @@ export default function ProductsPage() {
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!appUser || saving) return;
+
     const validationError = getValidationError(form, products, editingProduct?.id);
     if (validationError) {
       setFormError(validationError);
@@ -234,4 +236,193 @@ export default function ProductsPage() {
     const nextActive = !product.active;
     const confirmed = window.confirm(
       nextActive
-        ? `Kích hoạt lại sản phẩm “${product.name}”?`4D �1ND�1
+        ? `Kích hoạt lại sản phẩm “${product.name}”?`
+        : `Ngừng kinh doanh sản phẩm “${product.name}”? Sản phẩm không bị xóa và vẫn còn trong lịch sử.`,
+    );
+    if (!confirmed) return;
+
+    setChangingStatusId(product.id);
+    setLoadError(null);
+    try {
+      await setProductActive(product, nextActive, appUser.uid);
+    } catch (error) {
+      setLoadError(error instanceof Error ? error.message : 'Không thể đổi trạng thái sản phẩm.');
+    } finally {
+      setChangingStatusId(null);
+    }
+  }
+
+  function handleExactLookup() {
+    const code = query.trim();
+    if (!code) return;
+    const match = findProductByScannedCode(products, code);
+    if (match) {
+      setDetailProductId(match.product.id);
+      setSearchNotice(`Đã tìm thấy ${match.product.sku} - ${match.product.name} theo ${match.field}.`);
+      return;
+    }
+    setSearchNotice('Không tìm thấy mã chính xác. Danh sách vẫn đang lọc theo từ khóa hiện tại.');
+  }
+
+  function clearSearch() {
+    setQuery('');
+    setSearchNotice(null);
+  }
+
+  function toggleProductSelection(productId: string) {
+    setSelectedProductIds((current) => {
+      const next = new Set(current);
+      if (next.has(productId)) next.delete(productId);
+      else next.add(productId);
+      return next;
+    });
+  }
+
+  function toggleAllVisible() {
+    setSelectedProductIds((current) => {
+      const next = new Set(current);
+      const allVisibleSelected = filteredProducts.length > 0 && filteredProducts.every((product) => next.has(product.id));
+      for (const product of filteredProducts) {
+        if (allVisibleSelected) next.delete(product.id);
+        else next.add(product.id);
+      }
+      return next;
+    });
+  }
+
+  function clearFilters() {
+    setActiveFilter('all');
+    setStockFilter('all');
+  }
+
+  function printProducts(targetProducts: Product[]) {
+    const initialQuantities = Object.fromEntries(targetProducts.map((product) => [product.id, 1]));
+    navigate('/qr-printing', { state: { initialQuantities, source: 'products' } });
+  }
+
+  return (
+    <div className="products-page">
+      <header className="goods-heading">
+        <div>
+          <h1>Hàng hóa</h1>
+          <p className="muted">Quản lý sản phẩm, giá bán, tồn kho và thông tin liên quan.</p>
+        </div>
+      </header>
+
+      <GoodsToolbar
+        query={query}
+        importOpen={importOpen}
+        filtersOpen={filtersOpen}
+        onQueryChange={(value) => { setQuery(value); setSearchNotice(null); }}
+        onSubmitSearch={handleExactLookup}
+        onClearSearch={clearSearch}
+        onOpenScanner={() => setScannerOpen(true)}
+        onToggleImport={() => setImportOpen((current) => !current)}
+        onToggleFilters={() => setFiltersOpen((current) => !current)}
+        onOpenPrinting={() => navigate('/qr-printing')}
+        onCreate={openCreate}
+      />
+
+      <GoodsKpiBar stats={stats} />
+
+      {searchNotice ? <p className="goods-info" role="status">{searchNotice}</p> : null}
+      {loadError ? <p className="form-error" role="alert">{loadError}</p> : null}
+
+      {importOpen && appUser ? (
+        <ProductExcelImportPanel products={products} actorUid={appUser.uid} onClose={() => setImportOpen(false)} />
+      ) : null}
+
+      {editorOpen ? (
+        <section className="product-editor" aria-label={editingProduct ? 'Sửa sản phẩm' : 'Thêm sản phẩm'}>
+          <div className="section-heading">
+            <div>
+              <h2>{editingProduct ? 'Sửa sản phẩm' : 'Thêm sản phẩm mới'}</h2>
+              <p>Tồn kho không chỉnh tại đây; sản phẩm mới luôn bắt đầu từ tồn 0.</p>
+            </div>
+            <button className="button button--secondary goods-touch" type="button" onClick={closeEditor} disabled={saving}>Đóng</button>
+          </div>
+
+          <form className="product-form" onSubmit={handleSubmit}>
+            <label>SKU *<input value={form.sku} onChange={(event) => setForm({ ...form, sku: event.target.value })} required /></label>
+            <label className="form-field--wide">Tên sản phẩm *<input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} required /></label>
+            <label>Barcode<input value={form.barcode} onChange={(event) => setForm({ ...form, barcode: event.target.value })} /></label>
+            <label>Mã QR<input value={form.qrCode} onChange={(event) => setForm({ ...form, qrCode: event.target.value })} /></label>
+            <label>Đơn vị tính<input placeholder="Cái, hộp, bộ..." value={form.unit} onChange={(event) => setForm({ ...form, unit: event.target.value })} /></label>
+            <label>Giá vốn hiện tại (VND)<input type="number" min="0" step="1" value={form.costPrice} onChange={(event) => setForm({ ...form, costPrice: event.target.value })} /></label>
+            <label>Giá bán (VND)<input type="number" min="0" step="1" value={form.salePrice} onChange={(event) => setForm({ ...form, salePrice: event.target.value })} /></label>
+            <label>Tồn tối thiểu<input type="number" min="0" step="1" placeholder="Không cảnh báo" value={form.minStock} onChange={(event) => setForm({ ...form, minStock: event.target.value })} /></label>
+            <label className="checkbox-field"><input type="checkbox" checked={form.active} onChange={(event) => setForm({ ...form, active: event.target.checked })} />Đang kinh doanh</label>
+
+            {formError ? <p className="form-error form-field--full" role="alert">{formError}</p> : null}
+            <div className="form-actions form-field--full">
+              <button className="button button--secondary goods-touch" type="button" onClick={closeEditor} disabled={saving}>Hủy</button>
+              <button className="button button--primary goods-touch" type="submit" disabled={saving}>{saving ? 'Đang lưu...' : editingProduct ? 'Lưu thay đổi' : 'Tạo sản phẩm'}</button>
+            </div>
+          </form>
+        </section>
+      ) : null}
+
+      <div className="goods-catalog-layout">
+        <GoodsFilters
+          open={filtersOpen}
+          activeFilter={activeFilter}
+          stockFilter={stockFilter}
+          onActiveFilterChange={setActiveFilter}
+          onStockFilterChange={setStockFilter}
+          onClear={clearFilters}
+        />
+
+        <section className="goods-panel" aria-label="Danh sách hàng hóa">
+          <GoodsBulkActionBar count={selectedProducts.length} onPrint={() => printProducts(selectedProducts)} onClear={() => setSelectedProductIds(new Set())} />
+
+          {loading ? (
+            <div className="goods-empty">Đang tải hàng hóa...</div>
+          ) : filteredProducts.length === 0 ? (
+            <div className="goods-empty">
+              <strong>{products.length === 0 ? 'Chưa có hàng hóa nào.' : 'Không tìm thấy hàng hóa phù hợp.'}</strong>
+              <span>{products.length === 0 ? 'Bấm “+ Thêm sản phẩm” để tạo sản phẩm đầu tiên.' : 'Thử từ khóa khác hoặc xóa bộ lọc hiện tại.'}</span>
+            </div>
+          ) : (
+            <>
+              <GoodsTable
+                products={filteredProducts}
+                selectedIds={selectedProductIds}
+                onToggleProduct={toggleProductSelection}
+                onToggleAllVisible={toggleAllVisible}
+                onView={(product) => setDetailProductId(product.id)}
+                onEdit={openEdit}
+              />
+              <GoodsResponsiveList
+                products={filteredProducts}
+                selectedIds={selectedProductIds}
+                onToggleProduct={toggleProductSelection}
+                onView={(product) => setDetailProductId(product.id)}
+                onEdit={openEdit}
+              />
+            </>
+          )}
+        </section>
+      </div>
+
+      {detailProduct ? (
+        <ProductDetail
+          product={detailProduct}
+          changingStatus={changingStatusId === detailProduct.id}
+          onClose={() => setDetailProductId(null)}
+          onEdit={openEdit}
+          onToggleActive={(product) => void handleToggleActive(product)}
+          onScan={() => { setDetailProductId(null); setScannerOpen(true); }}
+          onPrint={(product) => printProducts([product])}
+        />
+      ) : null}
+
+      {scannerOpen ? (
+        <ProductScanDialog
+          products={products}
+          onClose={() => setScannerOpen(false)}
+          onFound={(product) => { setScannerOpen(false); setDetailProductId(product.id); }}
+        />
+      ) : null}
+    </div>
+  );
+}
