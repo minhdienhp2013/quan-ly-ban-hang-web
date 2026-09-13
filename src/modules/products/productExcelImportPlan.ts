@@ -1,0 +1,74 @@
+import type { Product } from '../../types/models';
+import type { ExcelProductImportRow } from './excelImport';
+
+export type ProductExcelDuplicateMode = 'skip' | 'update';
+
+export interface ProductExcelStockPreview {
+  current: number;
+  target: number;
+  delta: number;
+}
+
+export interface ProductExcelImportSummary {
+  newCount: number;
+  duplicateCount: number;
+  conflictCount: number;
+  errorCount: number;
+  updateCount: number;
+  stockAdjustmentCount: number;
+  skippedCount: number;
+}
+
+export function getMatchedProduct(
+  row: ExcelProductImportRow,
+  products: readonly Product[],
+): Product | undefined {
+  if (!row.matchedProductId) return undefined;
+  return products.find((product) => product.id === row.matchedProductId);
+}
+
+export function getExcelStockPreview(
+  row: ExcelProductImportRow,
+  products: readonly Product[],
+): ProductExcelStockPreview | null {
+  if (typeof row.sourceStockQuantity !== 'number') return null;
+  if (row.status === 'error' || row.status === 'conflict') return null;
+
+  const matched = getMatchedProduct(row, products);
+  const current = row.status === 'ready' ? 0 : matched?.stockQuantity;
+  if (typeof current !== 'number') return null;
+
+  const target = row.sourceStockQuantity;
+  const delta = Math.round((target - current) * 1000) / 1000;
+  return { current, target, delta };
+}
+
+export function summarizeProductExcelImport(
+  rows: readonly ExcelProductImportRow[],
+  products: readonly Product[],
+  duplicateMode: ProductExcelDuplicateMode,
+  updateStock: boolean,
+): ProductExcelImportSummary {
+  const newCount = rows.filter((row) => row.status === 'ready').length;
+  const duplicateCount = rows.filter((row) => row.status === 'duplicate').length;
+  const conflictCount = rows.filter((row) => row.status === 'conflict').length;
+  const errorCount = rows.filter((row) => row.status === 'error').length;
+  const updateCount = duplicateMode === 'update' ? duplicateCount : 0;
+  const skippedCount = duplicateMode === 'skip' ? duplicateCount : 0;
+  const stockAdjustmentCount = updateStock
+    ? rows.filter((row) => {
+        const preview = getExcelStockPreview(row, products);
+        return preview ? preview.delta !== 0 : false;
+      }).length
+    : 0;
+
+  return {
+    newCount,
+    duplicateCount,
+    conflictCount,
+    errorCount,
+    updateCount,
+    stockAdjustmentCount,
+    skippedCount,
+  };
+}
