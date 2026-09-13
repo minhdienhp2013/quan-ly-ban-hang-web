@@ -4,7 +4,14 @@ import { isValidEan13, type BarcodeKind } from './codeGraphics';
 import LabelPreview, { type LabelDisplayOptions, type PrintableLabel } from './LabelPreview';
 import {
   DEFAULT_LABEL_CONFIG,
+  LABEL_74X22_PAGE_HEIGHT_MM,
+  LABEL_74X22_PAGE_WIDTH_MM,
+  LABEL_74X22_QR_DEFAULT_MM,
+  LABEL_74X22_QR_MAX_MM,
+  LABEL_74X22_QR_MIN_MM,
   LABEL_PRESETS,
+  clamp74x22QrSizeMm,
+  is74x22RowPage,
   validateLabelConfig,
   type LabelPaperConfig,
 } from './labelPresets';
@@ -15,6 +22,8 @@ interface PrintWorkspaceProps {
   products: Product[];
   initialQuantities?: Readonly<Record<string, number>>;
 }
+
+const LEGACY_QR_SIZE_MM = 14;
 
 export function sanitizeInitialQuantities(
   products: readonly Product[],
@@ -53,12 +62,13 @@ export default function PrintWorkspace({ products, initialQuantities }: PrintWor
   const [options, setOptions] = useState<LabelDisplayOptions>({
     showName: true,
     showSku: true,
-    showBarcode: true,
+    showBarcode: false,
     showQr: true,
     showPrice: true,
     showUnit: false,
-    showStoreName: true,
+    showStoreName: false,
     barcodeKind: 'CODE128',
+    qrSizeMm: LABEL_74X22_QR_DEFAULT_MM,
     storeName: undefined,
   });
 
@@ -97,8 +107,27 @@ export default function PrintWorkspace({ products, initialQuantities }: PrintWor
       .map((product) => `${product.sku} – ${product.name}`);
   }, [options.barcodeKind, options.showBarcode, products, quantities]);
 
+  const rowPage74x22 = is74x22RowPage(config);
+
   const updateConfigNumber = (field: keyof Pick<LabelPaperConfig, 'labelWidthMm' | 'labelHeightMm' | 'columns' | 'gapHorizontalMm' | 'gapVerticalMm' | 'marginMm'>, value: number) => {
     setConfig((current) => ({ ...current, id: 'custom', name: 'Khổ tùy chỉnh', [field]: value }));
+  };
+
+  const applyPreset = (preset: LabelPaperConfig) => {
+    setConfig(cloneConfig(preset));
+    setOptions((current) => is74x22RowPage(preset)
+      ? {
+          ...current,
+          showBarcode: false,
+          showStoreName: false,
+          qrSizeMm: LABEL_74X22_QR_DEFAULT_MM,
+        }
+      : {
+          ...current,
+          showBarcode: true,
+          showStoreName: true,
+          qrSizeMm: LEGACY_QR_SIZE_MM,
+        });
   };
 
   const setQuantity = (productId: string, value: number) => {
@@ -111,14 +140,16 @@ export default function PrintWorkspace({ products, initialQuantities }: PrintWor
     });
   };
 
-  const toggleOption = (field: keyof Omit<LabelDisplayOptions, 'barcodeKind' | 'storeName'>) => {
+  const toggleOption = (field: keyof Omit<LabelDisplayOptions, 'barcodeKind' | 'qrSizeMm' | 'storeName'>) => {
     setOptions((current) => ({ ...current, [field]: !current[field] }));
   };
 
   const handlePrint = () => {
     setPrintError('');
     try {
-      printLabels();
+      printLabels(rowPage74x22
+        ? { widthMm: LABEL_74X22_PAGE_WIDTH_MM, heightMm: LABEL_74X22_PAGE_HEIGHT_MM }
+        : undefined);
     } catch (error) {
       setPrintError(error instanceof Error ? error.message : 'Không thể mở hộp thoại in.');
     }
@@ -184,7 +215,7 @@ export default function PrintWorkspace({ products, initialQuantities }: PrintWor
               value={LABEL_PRESETS.some((preset) => preset.id === config.id) ? config.id : 'custom'}
               onChange={(event) => {
                 const preset = LABEL_PRESETS.find((item) => item.id === event.target.value);
-                if (preset) setConfig(cloneConfig(preset));
+                if (preset) applyPreset(preset);
                 else setConfig((current) => ({ ...current, id: 'custom', name: 'Khổ tùy chỉnh' }));
               }}
             >
@@ -194,12 +225,12 @@ export default function PrintWorkspace({ products, initialQuantities }: PrintWor
           </label>
 
           <div className="print-size-grid">
-            <label>Rộng (mm)<input type="number" min="0.1" step="0.1" value={config.labelWidthMm} onChange={(e) => updateConfigNumber('labelWidthMm', Number(e.target.value))} /></label>
-            <label>Cao (mm)<input type="number" min="0.1" step="0.1" value={config.labelHeightMm} onChange={(e) => updateConfigNumber('labelHeightMm', Number(e.target.value))} /></label>
+            <label>Rộng mỗi tem (mm)<input type="number" min="0.1" step="0.1" value={config.labelWidthMm} onChange={(e) => updateConfigNumber('labelWidthMm', Number(e.target.value))} /></label>
+            <label>Cao mỗi tem (mm)<input type="number" min="0.1" step="0.1" value={config.labelHeightMm} onChange={(e) => updateConfigNumber('labelHeightMm', Number(e.target.value))} /></label>
             <label>Số cột<input type="number" min="1" max="8" step="1" value={config.columns} onChange={(e) => updateConfigNumber('columns', Number(e.target.value))} /></label>
             <label>Gap ngang (mm)<input type="number" min="0" step="0.1" value={config.gapHorizontalMm} onChange={(e) => updateConfigNumber('gapHorizontalMm', Number(e.target.value))} /></label>
             <label>Gap dọc (mm)<input type="number" min="0" step="0.1" value={config.gapVerticalMm} onChange={(e) => updateConfigNumber('gapVerticalMm', Number(e.target.value))} /></label>
-            <label>Margin (mm)<input type="number" min="0" step="0.1" value={config.marginMm} onChange={(e) => updateConfigNumber('marginMm', Number(e.target.value))} /></label>
+            <label>Margin (mm)<input type="number" min="0" step="0.05" value={config.marginMm} onChange={(e) => updateConfigNumber('marginMm', Number(e.target.value))} /></label>
           </div>
 
           {validationErrors.length ? <div className="qr-error" role="alert">{validationErrors.join(' ')}</div> : null}
@@ -214,6 +245,24 @@ export default function PrintWorkspace({ products, initialQuantities }: PrintWor
             <label><input type="checkbox" checked={options.showUnit} onChange={() => toggleOption('showUnit')} /> Đơn vị tính</label>
             <label><input type="checkbox" checked={options.showStoreName} onChange={() => toggleOption('showStoreName')} /> Tên cửa hàng</label>
           </fieldset>
+
+          {rowPage74x22 && options.showQr ? (
+            <label className="qr-field">
+              Kích thước QR (mm)
+              <input
+                type="number"
+                min={LABEL_74X22_QR_MIN_MM}
+                max={LABEL_74X22_QR_MAX_MM}
+                step="0.5"
+                value={options.qrSizeMm}
+                onChange={(event) => setOptions((current) => ({
+                  ...current,
+                  qrSizeMm: clamp74x22QrSizeMm(Number(event.target.value)),
+                }))}
+              />
+              <small className="muted">Cho phép {LABEL_74X22_QR_MIN_MM}–{LABEL_74X22_QR_MAX_MM} mm; mặc định {LABEL_74X22_QR_DEFAULT_MM} mm.</small>
+            </label>
+          ) : null}
 
           {options.showBarcode ? (
             <label className="qr-field">
@@ -236,7 +285,7 @@ export default function PrintWorkspace({ products, initialQuantities }: PrintWor
           <div className="print-preview-heading">
             <div>
               <h3>3. Preview</h3>
-              <p className="muted">Kích thước dùng đơn vị mm. Khi in, chọn đúng paper size của driver, Scale 100% và Margin None nếu máy in yêu cầu.</p>
+              <p className="muted">Kích thước dùng đơn vị mm. Với giấy 74 × 22 mm, mỗi hàng xem trước là một trang in vật lý. Khi in, chọn Scale 100% và Margin None nếu driver yêu cầu.</p>
             </div>
             <button className="button button--primary qr-touch-button" type="button" disabled={!labels.length || validationErrors.length > 0} onClick={handlePrint}>
               In tem
