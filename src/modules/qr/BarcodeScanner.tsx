@@ -3,23 +3,45 @@ import {
   listCameras,
   startCameraScanner,
   type CameraDevice,
+  type ScanObservation,
   type ScanResult,
   type ScannerController,
 } from './scannerService';
 import { createDuplicateSuppressor } from './productLookup';
+import { createPresenceRearmGate } from './presenceRearm';
+
+export type ScanPolicy = 'time-window' | 'leave-to-rearm';
 
 interface BarcodeScannerProps {
   onScan: (result: ScanResult) => void;
   duplicateWindowMs?: number;
+  scanPolicy?: ScanPolicy;
+  absenceThresholdMs?: number;
 }
 
-export default function BarcodeScanner({ onScan, duplicateWindowMs = 1400 }: BarcodeScannerProps) {
+const NATIVE_ABSENCE_THRESHOLD_MS = 480;
+const ZXING_ABSENCE_THRESHOLD_MS = 900;
+const ZXING_PRESENCE_ATTEMPT_DELAY_MS = 240;
+
+function thresholdFor(observation: ScanObservation, override?: number) {
+  if (Number.isFinite(override) && Number(override) >= 0) return Number(override);
+  return observation.engine === 'zxing' ? ZXING_ABSENCE_THRESHOLD_MS : NATIVE_ABSENCE_THRESHOLD_MS;
+}
+
+export default function BarcodeScanner({
+  onScan,
+  duplicateWindowMs = 1400,
+  scanPolicy = 'time-window',
+  absenceThresholdMs,
+}: BarcodeScannerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const controllerRef = useRef<ScannerController | null>(null);
   const desiredActiveRef = useRef(false);
   const startTokenRef = useRef(0);
+  const selectedCameraIdRef = useRef('');
   const onScanRef = useRef(onScan);
   const suppressor = useMemo(() => createDuplicateSuppressor(duplicateWindowMs), [duplicateWindowMs]);
+  const presenceGate = useMemo(() => createPresenceRearmGate(), []);
   const [active, setActive] = useState(false);
   const [status, setStatus] = useState('Camera đang tắt.');
   const [error, setError] = useState('');
@@ -31,25 +53,46 @@ export default function BarcodeScanner({ onScan, duplicateWindowMs = 1400 }: Bar
     onScanRef.current = onScan;
   }, [onScan]);
 
-  const stop = useCallback((keepDesiredState = false) => {
+  const handleObservation = useCallback((observation: ScanObservation) => {
+    if (scanPolicy !== 'leave-to-rearm') return;
+    const outcome = presenceGate.observe(observation, thresholdFor(observation, absenceThresholdMs));
+    if (outcome.multiCode) {
+      setStatus('Chỉ đưa một mã vào vùng quét.');
+      return;
+    }
+    if (outcome.accepted) {
+      onScanRef.current(outcome.accepted);
+      setStatus('Đã nhận mã. Đưa mã ra khỏi khung để quét tiếp.');
+      return;
+    }
+    if (outcome.rearmed) setStatus('Sẵn sàng quét mã tiếp theo.');
+  }, [absenceThresholdMs, presenceGate, scanPolicy]);
+
+  const stop = useCallback((keepDesiredState = false, preservePresence = false) => {
     startTokenRef.current += 1;
     controllerRef.current?.stop();
     controllerRef.current = null;
     if (!keepDesiredState) desiredActiveRef.current = false;
+    if (scanPolicy === 'leave-to-rearm') {
+      if (preservePresence) presenceGate.pause();
+      else presenceGate.reset();
+    }
     setActive(false);
     setEngine('');
     setStatus(keepDesiredState ? 'Tạm dừng camera khi tab không hoạt động.' : 'Camera đang tắt.');
-  }, []);
+  }, [presenceGate, scanPolicy]);
 
   const start = useCallback(
-    async (deviceId = selectedCameraId) => {
+    async (deviceId?: string, preservePresence = false) => {
       const video = videoRef.current;
+      const resolvedDeviceId = deviceId ?? selectedCameraIdRef.current;
       if (!video) return;
 
       const token = ++startTokenRef.current;
       desiredActiveRef.current = true;
       controllerRef.current?.stop();
       controllerRef.current = null;
+      if (scanPolicy === 'leave-to-rearm' && !preservePresence) presenceGate.reset();
       setError('');
       setStatus('Đang mở camera…');
 
@@ -57,10 +100,17 @@ export default function BarcodeScanner({ onScan, duplicateWindowMs = 1400 }: Bar
         const controller = await startCameraScanner(
           video,
           (result) => {
+            if (scanPolicy === 'leave-to-rearm') return;
             if (!suppressor.shouldAccept(result.value)) return;
             onScanRef.current(result);
           },
-          deviceId || undefined,
+          resolvedDeviceId || undefined,
+          scanPolicy === 'leave-to-rearm'
+            ? {
+                onObservation: handleObservation,
+                zxingAttemptDelayMs: ZXING_PRESENCE_ATTEMPT_DELAY_MS,
+              }
+            : undefined,
         );
 
         if (token !== startTokenRef.current || !desiredActiveRef.current) {
@@ -71,14 +121,23 @@ export default function BarcodeScanner({ onScan, duplicateWindowMs = 1400 }: Bar
         controllerRef.current = controller;
         setActive(true);
         setEngine(controller.engine === 'barcode-detector' ? 'BarcodeDetector' : 'ZXing fallback');
-        setStatus('Đang quét liên tục. Đưa QR hoặc mã vạch vào khung hình.');
+        setStatus(
+          scanPolicy === 'leave-to-rearm'
+            ? presenceGate.getState() === 'READY'
+              ? 'Sẵn sàng quét mã.'
+              : 'Đã nhận mã. Đưa mã ra khỏi khung để quét tiếp.'
+            : 'Đang quét liên tục. Đưa QR hoặc mã vạch vào khung hình.',
+        );
 
         const available = await listCameras();
         if (token !== startTokenRef.current) return;
         setCameras(available);
         const stream = video.srcObject instanceof MediaStream ? video.srcObject : null;
         const currentDeviceId = stream?.getVideoTracks()[0]?.getSettings().deviceId;
-        if (currentDeviceId) setSelectedCameraId(currentDeviceId);
+        if (currentDeviceId) {
+          selectedCameraIdRef.current = currentDeviceId;
+          setSelectedCameraId(currentDeviceId);
+        }
       } catch (reason) {
         if (token !== startTokenRef.current) return;
         desiredActiveRef.current = false;
@@ -88,15 +147,15 @@ export default function BarcodeScanner({ onScan, duplicateWindowMs = 1400 }: Bar
         setError(reason instanceof Error ? reason.message : 'Không thể khởi động camera.');
       }
     },
-    [selectedCameraId, suppressor],
+    [handleObservation, presenceGate, scanPolicy, suppressor],
   );
 
   useEffect(() => {
     const handleVisibility = () => {
       if (document.hidden) {
-        if (desiredActiveRef.current) stop(true);
+        if (desiredActiveRef.current) stop(true, true);
       } else if (desiredActiveRef.current) {
-        void start(selectedCameraId);
+        void start(selectedCameraIdRef.current, true);
       }
     };
 
@@ -107,8 +166,9 @@ export default function BarcodeScanner({ onScan, duplicateWindowMs = 1400 }: Bar
       startTokenRef.current += 1;
       controllerRef.current?.stop();
       controllerRef.current = null;
+      presenceGate.reset();
     };
-  }, [selectedCameraId, start, stop]);
+  }, [presenceGate, start, stop]);
 
   const switchCamera = async () => {
     const available = cameras.length > 1 ? cameras : await listCameras();
@@ -119,8 +179,10 @@ export default function BarcodeScanner({ onScan, duplicateWindowMs = 1400 }: Bar
     }
     const index = Math.max(0, available.findIndex((camera) => camera.deviceId === selectedCameraId));
     const next = available[(index + 1) % available.length];
+    selectedCameraIdRef.current = next.deviceId;
     setSelectedCameraId(next.deviceId);
     suppressor.reset();
+    presenceGate.reset();
     if (desiredActiveRef.current) await start(next.deviceId);
   };
 
@@ -164,7 +226,10 @@ export default function BarcodeScanner({ onScan, duplicateWindowMs = 1400 }: Bar
             value={selectedCameraId}
             onChange={(event) => {
               const nextId = event.target.value;
+              selectedCameraIdRef.current = nextId;
               setSelectedCameraId(nextId);
+              suppressor.reset();
+              presenceGate.reset();
               if (desiredActiveRef.current) void start(nextId);
             }}
           >
