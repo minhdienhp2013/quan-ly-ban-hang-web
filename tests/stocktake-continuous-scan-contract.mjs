@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 import { createRequire } from 'node:module';
 import test from 'node:test';
-import ts from 'typescript';
+import * as ts from 'typescript';
 
 const require = createRequire(import.meta.url);
 
