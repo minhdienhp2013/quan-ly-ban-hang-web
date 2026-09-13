@@ -43,6 +43,7 @@ interface DraftRow {
   identityConflict: boolean;
   matchedProductId?: string;
   identityKeys: string[];
+  duplicateReasons: string[];
 }
 
 const aliases: Record<ProductField, string[]> = {
@@ -229,6 +230,10 @@ export async function parseProductExcel(
     const candidateIds = new Set<string>([...skuMatches, ...barcodeMatches, ...qrMatches]);
     const identityConflict = candidateIds.size > 1;
     const matchedProductId = candidateIds.size === 1 ? [...candidateIds][0] : undefined;
+    const duplicateReasons: string[] = [];
+    if (skuMatches.size > 0) duplicateReasons.push('SKU đã có trong hệ thống');
+    if (barcode && barcodeMatches.size > 0) duplicateReasons.push('Barcode đã có trong hệ thống');
+    if (qrCode && qrMatches.size > 0) duplicateReasons.push('QR đã có trong hệ thống');
 
     const input: ProductInput | null = errors.length > 0
       ? null
@@ -256,6 +261,7 @@ export async function parseProductExcel(
         buildIdentityKey('barcode', barcode),
         buildIdentityKey('qrCode', qrCode),
       ].filter(Boolean),
+      duplicateReasons,
     };
   });
 
@@ -321,7 +327,7 @@ export async function parseProductExcel(
         rowNumber: draft.rowNumber,
         input: draft.input,
         status: 'duplicate',
-        message: 'Hàng trùng: đã xác định đúng một Product hiện hữu.',
+        message: draft.duplicateReasons.join('; ') || 'Hàng trùng: đã xác định đúng một Product hiện hữu.',
         ...(typeof draft.sourceStockQuantity === 'number' ? { sourceStockQuantity: draft.sourceStockQuantity } : {}),
         matchedProductId: draft.matchedProductId,
       };
