@@ -13,9 +13,19 @@ export interface ScanResult {
   engine: ScannerEngine;
 }
 
+export type ScanObservation =
+  | { kind: 'codes'; engine: ScannerEngine; observedAt: number; results: ScanResult[] }
+  | { kind: 'empty'; engine: ScannerEngine; observedAt: number }
+  | { kind: 'uncertain'; engine: ScannerEngine; observedAt: number };
+
 export interface ScannerController {
   engine: ScannerEngine;
   stop: () => void;
+}
+
+export interface CameraScannerOptions {
+  onObservation?: (observation: ScanObservation) => void;
+  zxingAttemptDelayMs?: number;
 }
 
 interface DetectedBarcode {
@@ -33,6 +43,7 @@ interface BarcodeDetectorConstructor {
 }
 
 const PREFERRED_FORMATS = ['qr_code', 'code_128', 'ean_13', 'ean_8', 'upc_a', 'upc_e'];
+const NATIVE_SCAN_INTERVAL_MS = 240;
 
 function barcodeDetectorConstructor(): BarcodeDetectorConstructor | undefined {
   return (window as Window & { BarcodeDetector?: BarcodeDetectorConstructor }).BarcodeDetector;
@@ -56,6 +67,22 @@ function stopVideo(video: HTMLVideoElement) {
   stream?.getTracks().forEach((track) => track.stop());
   video.pause();
   video.srcObject = null;
+}
+
+function observedAt() {
+  return performance.now();
+}
+
+function zxingErrorKind(error: unknown): string {
+  if (!error || typeof error !== 'object') return '';
+  const candidate = error as { getKind?: () => unknown; name?: unknown };
+  try {
+    const kind = candidate.getKind?.();
+    if (typeof kind === 'string') return kind;
+  } catch {
+    // Fall through to name when a third-party error does not expose getKind safely.
+  }
+  return typeof candidate.name === 'string' ? candidate.name : '';
 }
 
 export function describeCameraError(error: unknown): string {
@@ -104,6 +131,7 @@ async function startNativeScanner(
   video: HTMLVideoElement,
   onResult: (result: ScanResult) => void,
   deviceId?: string,
+  options: CameraScannerOptions = {},
 ): Promise<ScannerController | null> {
   const ctor = barcodeDetectorConstructor();
   if (!ctor || !navigator.mediaDevices?.getUserMedia) return null;
@@ -129,16 +157,27 @@ async function startNativeScanner(
     busy = true;
     try {
       const codes = await detector.detect(video);
-      for (const code of codes) {
-        const value = code.rawValue?.trim();
-        if (value) onResult({ value, format: code.format, engine: 'barcode-detector' });
-      }
+      const results = codes
+        .map((code) => ({
+          value: code.rawValue?.trim() ?? '',
+          format: code.format,
+          engine: 'barcode-detector' as const,
+        }))
+        .filter((result) => Boolean(result.value));
+
+      for (const result of results) onResult(result);
+      options.onObservation?.(
+        results.length > 0
+          ? { kind: 'codes', engine: 'barcode-detector', observedAt: observedAt(), results }
+          : { kind: 'empty', engine: 'barcode-detector', observedAt: observedAt() },
+      );
     } catch {
+      options.onObservation?.({ kind: 'uncertain', engine: 'barcode-detector', observedAt: observedAt() });
       // Decode failures are expected while the camera is moving; keep scanning.
     } finally {
       busy = false;
     }
-  }, 240);
+  }, NATIVE_SCAN_INTERVAL_MS);
 
   return {
     engine: 'barcode-detector',
@@ -155,21 +194,42 @@ async function startZxingScanner(
   video: HTMLVideoElement,
   onResult: (result: ScanResult) => void,
   deviceId?: string,
+  options: CameraScannerOptions = {},
 ): Promise<ScannerController> {
   if (!navigator.mediaDevices?.getUserMedia) {
     throw new Error('Trình duyệt này không hỗ trợ Web Camera API.');
   }
 
-  const reader = new BrowserMultiFormatReader();
-  const controls = await reader.decodeFromConstraints(cameraConstraints(deviceId), video, (result) => {
-    if (!result) return;
-    const value = result.getText().trim();
-    if (!value) return;
-    onResult({
-      value,
-      format: String(result.getBarcodeFormat()),
-      engine: 'zxing',
-    });
+  const zxingDelay = options.zxingAttemptDelayMs;
+  const reader = new BrowserMultiFormatReader(
+    undefined,
+    Number.isFinite(zxingDelay) && Number(zxingDelay) > 0
+      ? { delayBetweenScanAttempts: Number(zxingDelay), delayBetweenScanSuccess: Number(zxingDelay) }
+      : undefined,
+  );
+  const controls = await reader.decodeFromConstraints(cameraConstraints(deviceId), video, (result, error) => {
+    const timestamp = observedAt();
+    if (result) {
+      const value = result.getText().trim();
+      if (!value) {
+        options.onObservation?.({ kind: 'uncertain', engine: 'zxing', observedAt: timestamp });
+        return;
+      }
+      const scanResult: ScanResult = {
+        value,
+        format: String(result.getBarcodeFormat()),
+        engine: 'zxing',
+      };
+      onResult(scanResult);
+      options.onObservation?.({ kind: 'codes', engine: 'zxing', observedAt: timestamp, results: [scanResult] });
+      return;
+    }
+
+    if (zxingErrorKind(error) === 'NotFoundException') {
+      options.onObservation?.({ kind: 'empty', engine: 'zxing', observedAt: timestamp });
+      return;
+    }
+    options.onObservation?.({ kind: 'uncertain', engine: 'zxing', observedAt: timestamp });
   });
 
   let stopped = false;
@@ -188,15 +248,16 @@ export async function startCameraScanner(
   video: HTMLVideoElement,
   onResult: (result: ScanResult) => void,
   deviceId?: string,
+  options: CameraScannerOptions = {},
 ): Promise<ScannerController> {
   if (!window.isSecureContext && window.location.hostname !== 'localhost') {
     throw new Error('Camera trên website công khai cần HTTPS (secure context).');
   }
 
   try {
-    const nativeController = await startNativeScanner(video, onResult, deviceId);
+    const nativeController = await startNativeScanner(video, onResult, deviceId, options);
     if (nativeController) return nativeController;
-    return await startZxingScanner(video, onResult, deviceId);
+    return await startZxingScanner(video, onResult, deviceId, options);
   } catch (error) {
     stopVideo(video);
     throw new Error(describeCameraError(error));
