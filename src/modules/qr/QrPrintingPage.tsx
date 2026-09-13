@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import type { Product } from '../../types/models';
 import { subscribeProducts } from '../products/productService';
-import PrintWorkspace from '../printing/PrintWorkspace';
+import PrintWorkspace, { sanitizeInitialQuantities } from '../printing/PrintWorkspace';
 import { BarcodeGraphic, QrGraphic, isValidEan13 } from '../printing/codeGraphics';
 import BarcodeScanner from './BarcodeScanner';
 import { findProductByScannedCode, type ProductCodeField } from './productLookup';
@@ -18,7 +19,13 @@ interface ScanHistoryItem {
   scannedAt: number;
 }
 
+function getRouteInitialQuantities(state: unknown): unknown {
+  if (!state || typeof state !== 'object' || Array.isArray(state)) return undefined;
+  return (state as { initialQuantities?: unknown }).initialQuantities;
+}
+
 export default function QrPrintingPage() {
+  const location = useLocation();
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
@@ -40,6 +47,16 @@ export default function QrPrintingPage() {
   const selectedProduct = useMemo(
     () => products.find((product) => product.id === selectedProductId) ?? null,
     [products, selectedProductId],
+  );
+
+  const routeInitialQuantities = useMemo(
+    () => getRouteInitialQuantities(location.state),
+    [location.state],
+  );
+
+  const validatedInitialQuantities = useMemo(
+    () => sanitizeInitialQuantities(products, routeInitialQuantities),
+    [products, routeInitialQuantities],
   );
 
   const handleScan = (result: ScanResult) => {
@@ -144,7 +161,12 @@ export default function QrPrintingPage() {
         ) : <p className="muted">Chọn sản phẩm hoặc quét mã để tạo preview.</p>}
       </section>
 
-      <PrintWorkspace products={products} />
+      {!loading ? (
+        <PrintWorkspace
+          products={products}
+          initialQuantities={validatedInitialQuantities}
+        />
+      ) : null}
     </div>
   );
 }
