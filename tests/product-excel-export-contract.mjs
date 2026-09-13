@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import test from 'node:test';
-import ts from 'typescript';
+import { transpileModule } from 'typescript';
 import * as XLSX from 'xlsx';
 
 const require = createRequire(import.meta.url);
@@ -10,10 +10,10 @@ const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf
 
 function loadTsModule(path) {
   const source = read(path);
-  const output = ts.transpileModule(source, {
+  const output = transpileModule(source, {
     compilerOptions: {
-      module: ts.ModuleKind.CommonJS,
-      target: ts.ScriptTarget.ES2022,
+      module: 1,
+      target: 9,
       esModuleInterop: true,
     },
     fileName: path,
