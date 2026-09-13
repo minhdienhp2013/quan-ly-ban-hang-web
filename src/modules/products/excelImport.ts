@@ -3,12 +3,26 @@ import type { Product } from '../../types/models';
 import type { ProductInput } from './productService';
 
 export type ExcelImportStatus = 'ready' | 'duplicate' | 'conflict' | 'error';
+export type ExcelProductField =
+  | 'sku'
+  | 'name'
+  | 'barcode'
+  | 'qrCode'
+  | 'unit'
+  | 'costPrice'
+  | 'salePrice'
+  | 'minStock'
+  | 'stockQuantity'
+  | 'active';
+export type ExcelProductMetadataField = Exclude<ExcelProductField, 'stockQuantity'>;
 
 export interface ExcelProductImportRow {
   rowNumber: number;
   input: ProductInput | null;
   status: ExcelImportStatus;
   message: string;
+  presentFields: ExcelProductField[];
+  metadataPatch: Partial<ProductInput>;
   sourceStockQuantity?: number;
   matchedProductId?: string;
 }
@@ -21,23 +35,13 @@ export interface ExcelProductImportResult {
 }
 
 type RawRow = Record<string, unknown>;
-type ProductField =
-  | 'sku'
-  | 'name'
-  | 'barcode'
-  | 'qrCode'
-  | 'unit'
-  | 'costPrice'
-  | 'salePrice'
-  | 'minStock'
-  | 'stockQuantity'
-  | 'active';
-
 type IdentityKind = 'sku' | 'barcode' | 'qrCode';
 
 interface DraftRow {
   rowNumber: number;
   input: ProductInput | null;
+  presentFields: ExcelProductField[];
+  metadataPatch: Partial<ProductInput>;
   sourceStockQuantity?: number;
   errors: string[];
   identityConflict: boolean;
@@ -46,7 +50,7 @@ interface DraftRow {
   duplicateReasons: string[];
 }
 
-const aliases: Record<ProductField, string[]> = {
+const aliases: Record<ExcelProductField, string[]> = {
   sku: ['sku', 'mahang', 'masanpham', 'masp', 'mah', 'code'],
   name: ['tensanpham', 'tenhang', 'tenhanghoa', 'sanpham', 'productname', 'name'],
   barcode: ['barcode', 'mavach', 'ean', 'upc'],
@@ -113,7 +117,7 @@ function parseActive(value: unknown) {
   return !inactiveValues.includes(text);
 }
 
-function findHeader(headers: string[], field: ProductField) {
+function findHeader(headers: string[], field: ExcelProductField) {
   const accepted = new Set(aliases[field]);
   return headers.find((header) => accepted.has(normalizeHeader(header)));
 }
@@ -180,11 +184,14 @@ export async function parseProductExcel(
   }
 
   const headers = Object.keys(rawRows[0]);
-  const fieldHeaders: Partial<Record<ProductField, string>> = {};
-  (Object.keys(aliases) as ProductField[]).forEach((field) => {
+  const fieldHeaders: Partial<Record<ExcelProductField, string>> = {};
+  (Object.keys(aliases) as ExcelProductField[]).forEach((field) => {
     const header = findHeader(headers, field);
     if (header) fieldHeaders[field] = header;
   });
+  const presentFields = (Object.keys(fieldHeaders) as ExcelProductField[]).filter(
+    (field) => Boolean(fieldHeaders[field]),
+  );
 
   if (!fieldHeaders.sku || !fieldHeaders.name) {
     throw new Error('Excel phải có tối thiểu cột “Mã hàng/SKU” và “Tên hàng/Tên sản phẩm”.');
@@ -203,26 +210,11 @@ export async function parseProductExcel(
     const salePriceValue = getValue(row, fieldHeaders.salePrice);
     const minStockValue = getValue(row, fieldHeaders.minStock);
     const stockQuantityValue = getValue(row, fieldHeaders.stockQuantity);
+    const activeValue = getValue(row, fieldHeaders.active);
     const sourceStockQuantity = toNonNegativeNumber(stockQuantityValue);
-
-    const errors: string[] = [];
-    if (!sku) errors.push('Thiếu SKU/Mã hàng');
-    if (!name) errors.push('Thiếu tên sản phẩm');
-
     const costPrice = toNonNegativeNumber(costPriceValue);
     const salePrice = toNonNegativeNumber(salePriceValue);
     const minStock = toNonNegativeNumber(minStockValue);
-
-    if (toText(costPriceValue) && typeof costPrice === 'undefined') errors.push('Giá vốn không hợp lệ');
-    if (toText(salePriceValue) && typeof salePrice === 'undefined') errors.push('Giá bán không hợp lệ');
-    if (toText(minStockValue) && typeof minStock === 'undefined') errors.push('Tồn tối thiểu không hợp lệ');
-    if (
-      fieldHeaders.stockQuantity &&
-      toText(stockQuantityValue) &&
-      typeof sourceStockQuantity === 'undefined'
-    ) {
-      errors.push('Tồn kho không hợp lệ');
-    }
 
     const skuMatches = getIdentityMatches(identityIndexes, 'sku', sku);
     const barcodeMatches = getIdentityMatches(identityIndexes, 'barcode', barcode);
@@ -235,6 +227,36 @@ export async function parseProductExcel(
     if (barcode && barcodeMatches.size > 0) duplicateReasons.push('Barcode đã có trong hệ thống');
     if (qrCode && qrMatches.size > 0) duplicateReasons.push('QR đã có trong hệ thống');
 
+    const errors: string[] = [];
+    if (!sku) errors.push('Thiếu SKU/Mã hàng');
+    if (!name && !matchedProductId) errors.push('Thiếu tên sản phẩm');
+    if (toText(costPriceValue) && typeof costPrice === 'undefined') errors.push('Giá vốn không hợp lệ');
+    if (toText(salePriceValue) && typeof salePrice === 'undefined') errors.push('Giá bán không hợp lệ');
+    if (toText(minStockValue) && typeof minStock === 'undefined') errors.push('Tồn tối thiểu không hợp lệ');
+    if (
+      fieldHeaders.stockQuantity &&
+      toText(stockQuantityValue) &&
+      typeof sourceStockQuantity === 'undefined'
+    ) {
+      errors.push('Tồn kho không hợp lệ');
+    }
+
+    const metadataPatch: Partial<ProductInput> = {};
+    if (name) metadataPatch.name = name;
+    if (fieldHeaders.barcode && barcode) metadataPatch.barcode = barcode;
+    if (fieldHeaders.qrCode && qrCode) metadataPatch.qrCode = qrCode;
+    if (fieldHeaders.unit && unit) metadataPatch.unit = unit;
+    if (fieldHeaders.costPrice && toText(costPriceValue) && typeof costPrice === 'number') {
+      metadataPatch.costPrice = Math.round(costPrice);
+    }
+    if (fieldHeaders.salePrice && toText(salePriceValue) && typeof salePrice === 'number') {
+      metadataPatch.salePrice = Math.round(salePrice);
+    }
+    if (fieldHeaders.minStock && toText(minStockValue) && typeof minStock === 'number') {
+      metadataPatch.minStock = minStock;
+    }
+    if (fieldHeaders.active && toText(activeValue)) metadataPatch.active = parseActive(activeValue);
+
     const input: ProductInput | null = errors.length > 0
       ? null
       : {
@@ -246,12 +268,14 @@ export async function parseProductExcel(
           costPrice: Math.round(costPrice ?? 0),
           salePrice: Math.round(salePrice ?? 0),
           minStock: typeof minStock === 'number' ? minStock : undefined,
-          active: parseActive(getValue(row, fieldHeaders.active)),
+          active: parseActive(activeValue),
         };
 
     return {
       rowNumber,
       input,
+      presentFields,
+      metadataPatch,
       errors,
       identityConflict,
       ...(typeof sourceStockQuantity === 'number' ? { sourceStockQuantity } : {}),
@@ -291,54 +315,53 @@ export async function parseProductExcel(
   }
 
   const rows = drafts.map<ExcelProductImportRow>((draft) => {
+    const common = {
+      rowNumber: draft.rowNumber,
+      input: draft.input,
+      presentFields: [...draft.presentFields],
+      metadataPatch: { ...draft.metadataPatch },
+      ...(typeof draft.sourceStockQuantity === 'number' ? { sourceStockQuantity: draft.sourceStockQuantity } : {}),
+    };
+
     if (draft.errors.length > 0) {
       return {
-        rowNumber: draft.rowNumber,
+        ...common,
         input: null,
         status: 'error',
         message: draft.errors.join('; '),
-        ...(typeof draft.sourceStockQuantity === 'number' ? { sourceStockQuantity: draft.sourceStockQuantity } : {}),
       };
     }
 
     if (draft.identityConflict) {
       return {
-        rowNumber: draft.rowNumber,
-        input: draft.input,
+        ...common,
         status: 'conflict',
         message: 'SKU/Barcode/QR đang trỏ tới các sản phẩm khác nhau.',
-        ...(typeof draft.sourceStockQuantity === 'number' ? { sourceStockQuantity: draft.sourceStockQuantity } : {}),
       };
     }
 
     if (duplicatedRowNumbers.has(draft.rowNumber)) {
       return {
-        rowNumber: draft.rowNumber,
-        input: draft.input,
+        ...common,
         status: 'conflict',
         message: 'SKU/Barcode/QR bị lặp hoặc nhiều dòng đang trỏ tới cùng một sản phẩm trong file.',
-        ...(typeof draft.sourceStockQuantity === 'number' ? { sourceStockQuantity: draft.sourceStockQuantity } : {}),
         ...(draft.matchedProductId ? { matchedProductId: draft.matchedProductId } : {}),
       };
     }
 
     if (draft.matchedProductId) {
       return {
-        rowNumber: draft.rowNumber,
-        input: draft.input,
+        ...common,
         status: 'duplicate',
         message: draft.duplicateReasons.join('; ') || 'Hàng trùng: đã xác định đúng một Product hiện hữu.',
-        ...(typeof draft.sourceStockQuantity === 'number' ? { sourceStockQuantity: draft.sourceStockQuantity } : {}),
         matchedProductId: draft.matchedProductId,
       };
     }
 
     return {
-      rowNumber: draft.rowNumber,
-      input: draft.input,
+      ...common,
       status: 'ready',
       message: 'Sản phẩm mới - sẵn sàng nhập',
-      ...(typeof draft.sourceStockQuantity === 'number' ? { sourceStockQuantity: draft.sourceStockQuantity } : {}),
     };
   });
 
