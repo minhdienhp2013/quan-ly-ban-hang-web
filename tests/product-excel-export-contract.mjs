@@ -2,9 +2,10 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import test from 'node:test';
-import { transpileModule } from 'typescript';
+import typescript from 'typescript';
 import * as XLSX from 'xlsx';
 
+const { transpileModule } = typescript;
 const require = createRequire(import.meta.url);
 const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
 
