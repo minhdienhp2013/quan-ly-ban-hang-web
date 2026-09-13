@@ -198,6 +198,7 @@ export async function runProductExcelImport(
 
     try {
       const existing = await readProductById(row.matchedProductId);
+      // buildDuplicateProductUpdateInput enforces duplicate identity by keeping sku: existing.sku.
       const updateInput = buildDuplicateProductUpdateInput(existing, row);
       await updateProduct(existing, updateInput, input.actorUid);
       metadataUpdated.add(row.rowNumber);
