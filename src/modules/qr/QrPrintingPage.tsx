@@ -9,6 +9,7 @@ import { findProductByScannedCode, type ProductCodeField } from './productLookup
 import type { ScanResult } from './scannerService';
 import './qrPrinting.css';
 import '../printing/printing.css';
+import '../printing/printIsolation.css';
 
 interface ScanHistoryItem {
   id: string;
