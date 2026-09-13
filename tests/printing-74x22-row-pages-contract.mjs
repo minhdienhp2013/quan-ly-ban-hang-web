@@ -35,7 +35,7 @@ test('74x22 preset describes the whole 74mm row and two 35x22 labels', () => {
   assert.match(presetsSource, /LABEL_74X22_PAGE_WIDTH_MM = 74/);
   assert.match(presetsSource, /LABEL_74X22_PAGE_HEIGHT_MM = 22/);
   assert.match(presetsSource, /id: LABEL_74X22_PRESET_ID,[\s\S]*?labelWidthMm: 35,[\s\S]*?labelHeightMm: 22,[\s\S]*?columns: 2,[\s\S]*?gapHorizontalMm: 0\.1,[\s\S]*?gapVerticalMm: 0,[\s\S]*?marginMm: 1\.95/);
-  assert.equal(1.95 + 35 + 0.1 + 35 + 1.95, 74);
+  assert.ok(Math.abs((1.95 + 35 + 0.1 + 35 + 1.95) - 74) < 0.001);
 });
 
 test('74x22 QR defaults to 19mm and input is clamped to 12..19mm', () => {
