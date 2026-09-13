@@ -2,7 +2,6 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import vm from 'node:vm';
-import * as ts from 'typescript';
 
 const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
 const printSource = read('src/modules/printing/PrintWorkspace.tsx');
@@ -14,17 +13,15 @@ function loadSanitizer() {
   const end = printSource.indexOf(endMarker, start);
   assert.ok(start >= 0 && end > start, 'sanitizeInitialQuantities must exist');
 
-  const source = printSource.slice(start, end + 3);
-  const compiled = ts.transpileModule(source, {
-    compilerOptions: {
-      module: ts.ModuleKind.CommonJS,
-      target: ts.ScriptTarget.ES2022,
-    },
-  }).outputText;
+  const executable = printSource
+    .slice(start, end + 3)
+    .replace('export function ', 'function ')
+    .replace('products: readonly Product[]', 'products')
+    .replace('initialQuantities: unknown', 'initialQuantities')
+    .replace('): Record<string, number> {', ') {')
+    .replace('const sanitized: Record<string, number> = {};', 'const sanitized = {};');
 
-  const module = { exports: {} };
-  vm.runInNewContext(compiled, { module, exports: module.exports });
-  return module.exports.sanitizeInitialQuantities;
+  return vm.runInNewContext(`${executable}\nsanitizeInitialQuantities;`);
 }
 
 const sanitizeInitialQuantities = loadSanitizer();
