@@ -12,6 +12,7 @@ import GoodsTable from './GoodsTable';
 import GoodsToolbar from './GoodsToolbar';
 import ProductDetail from './ProductDetail';
 import ProductScanDialog from './ProductScanDialog';
+import { exportProductsToExcel } from './productExcelExport';
 import {
   computeGoodsStats,
   filterGoodsProducts,
@@ -295,6 +296,16 @@ export default function ProductsPage() {
     setStockFilter('all');
   }
 
+  function handleExportExcel() {
+    if (appUser?.role !== 'owner' || loading) return;
+    setLoadError(null);
+    try {
+      exportProductsToExcel(products);
+    } catch (error) {
+      setLoadError(error instanceof Error ? error.message : 'Không thể xuất file Excel hàng hóa.');
+    }
+  }
+
   function printProducts(targetProducts: Product[]) {
     const initialQuantities = Object.fromEntries(targetProducts.map((product) => [product.id, 1]));
     navigate('/qr-printing', { state: { initialQuantities, source: 'products' } });
@@ -313,12 +324,15 @@ export default function ProductsPage() {
         query={query}
         importOpen={importOpen}
         filtersOpen={filtersOpen}
+        showExportExcel={appUser?.role === 'owner'}
+        exportDisabled={loading}
         onQueryChange={(value) => { setQuery(value); setSearchNotice(null); }}
         onSubmitSearch={handleExactLookup}
         onClearSearch={clearSearch}
         onOpenScanner={() => setScannerOpen(true)}
         onToggleImport={() => setImportOpen((current) => !current)}
         onToggleFilters={() => setFiltersOpen((current) => !current)}
+        onExportExcel={handleExportExcel}
         onOpenPrinting={() => navigate('/qr-printing')}
         onCreate={openCreate}
       />
