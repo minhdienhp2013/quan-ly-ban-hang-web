@@ -82,7 +82,7 @@ export default function DashboardRankings({ topProducts, topCustomers, showProdu
                 </li>
               ))}
             </ol>
-          ) : null}
+          )}
         </section>
       ) : null}
     </div>
