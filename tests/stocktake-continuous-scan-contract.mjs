@@ -152,11 +152,38 @@ test('Stocktake integration uses shared leave-to-rearm scanner without duplicate
   assert.match(source, /completeStocktake/);
 });
 
-test('Stocktake business feedback covers success, unknown, inactive and existing draft rejection', () => {
+test('Stocktake business feedback distinguishes camera decode from inventory result', () => {
   const source = fs.readFileSync('src/modules/stocktake/StocktakePage.tsx', 'utf8');
+  const css = fs.readFileSync('src/modules/stocktake/stocktake.css', 'utf8');
+
+  assert.match(source, /Kết quả kiểm kê/);
   assert.match(source, /Đã quét thành công/);
+  assert.match(source, /ĐÃ CỘNG \+1/);
+  assert.match(source, /Không cộng vào kiểm kê/);
   assert.match(source, /Không tìm thấy sản phẩm/);
   assert.match(source, /Sản phẩm đã ngừng kinh doanh/);
   assert.match(source, /Sản phẩm này chưa có trong phiếu kiểm kê hiện tại/);
+  assert.match(source, /Chỉ khi xuất hiện thông báo xanh/);
+  assert.match(css, /Trạng thái camera:/);
+  assert.match(css, /\.stk-camera-panel \.qr-status::before/);
   assert.match(source, /playSuccessBeep\(\)/);
+});
+
+test('Stocktake UX exposes accessible mode state and non-misleading review copy', () => {
+  const source = fs.readFileSync('src/modules/stocktake/StocktakePage.tsx', 'utf8');
+  assert.match(source, /aria-pressed=\{entryMode === 'manual'\}/);
+  assert.match(source, /aria-pressed=\{entryMode === 'scan'\}/);
+  assert.match(source, /aria-live=\{liveMode\}/);
+  assert.match(source, /role=\{alertRole\}/);
+  assert.match(source, /Camera đã dừng\. Các thay đổi hiện tại chưa được lưu\./);
+  assert.match(source, /Lưu phiếu nháp để ghi lại kết quả kiểm kê\./);
+  assert.doesNotMatch(source, /chưa ghi Firebase/);
+});
+
+test('Stocktake phone CSS keeps business feedback in camera workflow and reduces nested padding', () => {
+  const css = fs.readFileSync('src/modules/stocktake/stocktake.css', 'utf8');
+  assert.match(css, /@media \(max-width: 768px\)/);
+  assert.match(css, /\.stk-camera-panel\s*\{\s*order: 1;/);
+  assert.match(css, /@media \(max-width: 430px\)[\s\S]*\.stk-camera-panel\s*\{\s*padding: 7px;/);
+  assert.match(css, /@media \(max-width: 430px\)[\s\S]*\.stk-camera-panel \.qr-scanner\s*\{\s*padding: 7px;/);
 });

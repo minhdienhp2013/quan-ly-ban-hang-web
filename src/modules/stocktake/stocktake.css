@@ -57,12 +57,12 @@
   border: 1px solid #e0e5ed;
   border-radius: 14px;
   background: #fbfcfe;
+  padding: 14px;
 }
 
-.stk-camera-panel,
-.stk-scan-side,
-.stk-review {
-  padding: 14px;
+.stk-camera-panel {
+  display: grid;
+  gap: 10px;
 }
 
 .stk-camera-panel .qr-scanner {
@@ -70,9 +70,33 @@
   padding: 14px;
 }
 
+.stk-camera-panel .qr-status::before {
+  content: 'Trạng thái camera: ';
+  font-weight: 800;
+}
+
+.stk-camera-feedback {
+  display: grid;
+  gap: 5px;
+}
+
+.stk-camera-feedback__label {
+  color: #49566b;
+  font-size: 0.78rem;
+  font-weight: 850;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
 .stk-end-scan {
   width: 100%;
-  margin-top: 12px;
+}
+
+.stk-scan-guidance {
+  margin: 0;
+  color: #687488;
+  font-size: 0.82rem;
+  line-height: 1.45;
 }
 
 .stk-scan-side {
@@ -107,25 +131,43 @@
 }
 
 .stk-feedback-slot {
-  min-height: 112px;
+  min-height: 76px;
+}
+
+.stk-feedback,
+.stk-feedback-idle {
+  margin: 0;
+  border-radius: 11px;
 }
 
 .stk-feedback {
   display: grid;
-  gap: 5px;
-  padding: 13px 14px;
+  gap: 4px;
+  padding: 10px 12px;
   border: 1px solid transparent;
-  border-radius: 11px;
-  line-height: 1.4;
+  line-height: 1.35;
 }
 
 .stk-feedback strong {
-  font-size: 0.95rem;
+  font-size: 0.92rem;
 }
 
 .stk-feedback span,
 .stk-feedback b {
   overflow-wrap: anywhere;
+}
+
+.stk-feedback__decision {
+  font-size: 0.82rem;
+  letter-spacing: 0.02em;
+}
+
+.stk-feedback-idle {
+  padding: 10px 12px;
+  border: 1px dashed #ccd5e1;
+  color: #687488;
+  background: #ffffff;
+  font-size: 0.84rem;
 }
 
 .stk-feedback--success {
@@ -253,6 +295,14 @@
     grid-template-columns: 1fr;
   }
 
+  .stk-camera-panel {
+    order: 1;
+  }
+
+  .stk-scan-side {
+    order: 2;
+  }
+
   .stk-manual-toolbar,
   .stk-review__heading {
     align-items: stretch;
@@ -285,12 +335,12 @@
   .stk-camera-panel,
   .stk-scan-side,
   .stk-review {
-    padding: 11px;
+    padding: 10px;
     border-radius: 12px;
   }
 
   .stk-camera-panel .qr-scanner {
-    padding: 12px;
+    padding: 10px;
   }
 
   .stk-scan-list-preview .stk-count-list {
@@ -313,6 +363,18 @@
 }
 
 @media (max-width: 430px) {
+  .stk-camera-panel {
+    padding: 7px;
+  }
+
+  .stk-camera-panel .qr-scanner {
+    padding: 7px;
+  }
+
+  .stk-camera-panel .qr-section-heading {
+    gap: 8px;
+  }
+
   .stk-scan-stats {
     gap: 7px;
   }
@@ -330,7 +392,16 @@
   }
 
   .stk-feedback-slot {
-    min-height: 104px;
+    min-height: 72px;
+  }
+
+  .stk-feedback,
+  .stk-feedback-idle {
+    padding: 9px 10px;
+  }
+
+  .stk-scan-guidance {
+    font-size: 0.78rem;
   }
 
   .stk-count-card {

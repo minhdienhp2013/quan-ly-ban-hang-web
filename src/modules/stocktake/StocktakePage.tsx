@@ -40,6 +40,7 @@ type ScanFeedback =
       kind: 'error' | 'warning';
       title: string;
       detail: string;
+      rejected?: boolean;
     };
 
 type SafariAudioWindow = Window & {
@@ -134,7 +135,7 @@ export default function StocktakePage() {
     setSessionState(next);
   }
 
-  function showScanFeedback(next: ScanFeedback, timeoutMs = 1800) {
+  function showScanFeedback(next: ScanFeedback, timeoutMs = 2200) {
     if (feedbackTimerRef.current !== null) window.clearTimeout(feedbackTimerRef.current);
     setScanFeedback(next);
     feedbackTimerRef.current = window.setTimeout(() => {
@@ -208,19 +209,22 @@ export default function StocktakePage() {
           kind: 'error',
           title: 'Không tìm thấy sản phẩm',
           detail: `Mã đã quét: ${result.value}`,
-        }, 2400);
+          rejected: true,
+        }, 2800);
       } else if (outcome.reason === 'inactive') {
         showScanFeedback({
           kind: 'warning',
           title: 'Sản phẩm đã ngừng kinh doanh',
           detail: match ? `${match.product.sku} - ${match.product.name}` : result.value,
-        }, 2400);
+          rejected: true,
+        }, 2800);
       } else {
         showScanFeedback({
           kind: 'warning',
-          title: 'Sản phẩm này chưa có trong phiếu kiểm kê hiện tại.',
+          title: 'Sản phẩm này chưa có trong phiếu kiểm kê hiện tại',
           detail: match ? `${match.product.sku} - ${match.product.name}` : result.value,
-        }, 2600);
+          rejected: true,
+        }, 3000);
       }
       return;
     }
@@ -398,6 +402,40 @@ export default function StocktakePage() {
     );
   }
 
+  function renderCameraFeedback() {
+    const liveMode = scanFeedback?.kind === 'success' ? 'polite' : 'assertive';
+    const alertRole = scanFeedback && scanFeedback.kind !== 'success' ? 'alert' : 'status';
+
+    return (
+      <div className="stk-camera-feedback" aria-label="Kết quả kiểm kê">
+        <span className="stk-camera-feedback__label">Kết quả kiểm kê</span>
+        <div className="stk-feedback-slot" aria-live={liveMode} role={alertRole}>
+          {scanFeedback ? (
+            <div className={`stk-feedback stk-feedback--${scanFeedback.kind}`}>
+              {scanFeedback.kind === 'success' ? (
+                <>
+                  <strong>✓ {scanFeedback.title}</strong>
+                  <b className="stk-feedback__decision">ĐÃ CỘNG +1</b>
+                  <span>{scanFeedback.code}</span>
+                  <span>{scanFeedback.name}</span>
+                  <b>Đã đếm: {formatQuantity(scanFeedback.quantity)}</b>
+                </>
+              ) : (
+                <>
+                  <strong>{scanFeedback.kind === 'error' ? '✕' : '⚠'} {scanFeedback.rejected ? 'Không cộng vào kiểm kê' : scanFeedback.title}</strong>
+                  {scanFeedback.rejected ? <b>{scanFeedback.title}</b> : null}
+                  <span>{scanFeedback.detail}</span>
+                </>
+              )}
+            </div>
+          ) : (
+            <p className="stk-feedback-idle">Chờ kết quả kiểm kê sau khi camera đọc mã.</p>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="inv-shell stk-shell">
       <header className="inv-page-header">
@@ -425,6 +463,7 @@ export default function StocktakePage() {
           <button
             className={`button ${entryMode === 'manual' ? 'button--primary' : 'button--secondary'}`}
             type="button"
+            aria-pressed={entryMode === 'manual'}
             onClick={() => setEntryMode('manual')}
           >
             Nhập thủ công
@@ -432,6 +471,7 @@ export default function StocktakePage() {
           <button
             className={`button ${entryMode === 'scan' ? 'button--primary' : 'button--secondary'}`}
             type="button"
+            aria-pressed={entryMode === 'scan'}
             onClick={activateScanMode}
           >
             Quét mã liên tục
@@ -498,7 +538,16 @@ export default function StocktakePage() {
                       <h3>Camera liên tục</h3>
                     </div>
                   </div>
+
+                  {renderCameraFeedback()}
+
                   <BarcodeScanner onScan={handleAcceptedScan} scanPolicy="leave-to-rearm" />
+
+                  <p className="stk-scan-guidance">
+                    Chỉ khi xuất hiện thông báo xanh “Đã quét thành công” thì số lượng mới được cộng +1.
+                    Sau mỗi lượt, đưa mã ra khỏi khung rồi quét mã tiếp theo.
+                  </p>
+
                   <button
                     className="button button--secondary stk-end-scan"
                     type="button"
@@ -508,29 +557,10 @@ export default function StocktakePage() {
                   </button>
                 </div>
 
-                <aside className="stk-scan-side" aria-label="Kết quả quét kiểm kê">
+                <aside className="stk-scan-side" aria-label="Tóm tắt phiên kiểm kê">
                   <div className="stk-scan-stats">
                     <div><span>Tổng lượt quét</span><strong>{session.acceptedScanCount}</strong></div>
                     <div><span>Mặt hàng đã quét</span><strong>{scannedProductCount}</strong></div>
-                  </div>
-
-                  <div className="stk-feedback-slot" aria-live="polite">
-                    {scanFeedback ? (
-                      <div className={`stk-feedback stk-feedback--${scanFeedback.kind}`}>
-                        <strong>{scanFeedback.kind === 'success' ? `✓ ${scanFeedback.title}` : scanFeedback.title}</strong>
-                        {scanFeedback.kind === 'success' ? (
-                          <>
-                            <span>{scanFeedback.code}</span>
-                            <span>{scanFeedback.name}</span>
-                            <b>+1 · Đã đếm: {formatQuantity(scanFeedback.quantity)}</b>
-                          </>
-                        ) : (
-                          <span>{scanFeedback.detail}</span>
-                        )}
-                      </div>
-                    ) : (
-                      <p className="muted">Mỗi accepted scan hợp lệ cộng đúng 1 vào số lượng thực tế.</p>
-                    )}
                   </div>
 
                   <button
@@ -554,7 +584,7 @@ export default function StocktakePage() {
                   <div>
                     <p className="eyebrow">Review</p>
                     <h3>Đã kết thúc quét</h3>
-                    <p className="muted">Camera đã dừng. Số lượng vẫn nằm trong phiên kiểm kê và chưa ghi Firebase.</p>
+                    <p className="muted">Camera đã dừng. Các thay đổi hiện tại chưa được lưu. Lưu phiếu nháp để ghi lại kết quả kiểm kê.</p>
                   </div>
                   <button className="button button--secondary" type="button" onClick={activateScanMode}>
                     Tiếp tục quét
