@@ -8,6 +8,7 @@ const presetsSource = read('src/modules/printing/labelPresets.ts');
 const previewSource = read('src/modules/printing/LabelPreview.tsx');
 const workspaceSource = read('src/modules/printing/PrintWorkspace.tsx');
 const cssSource = read('src/modules/printing/printing.css');
+const isolationSource = read('src/modules/printing/printIsolation.css');
 const printServiceSource = read('src/modules/printing/printService.ts');
 const codeGraphicsSource = read('src/modules/printing/codeGraphics.tsx');
 const qrPageSource = read('src/modules/qr/QrPrintingPage.tsx');
@@ -86,6 +87,15 @@ test('74x22 print page height is fixed and last page does not force a trailing b
   assert.match(cssSource, /\.label-print-page:last-child \{[\s\S]*?break-after: auto !important;[\s\S]*?page-break-after: auto !important;/);
   assert.match(workspaceSource, /widthMm: LABEL_74X22_PAGE_WIDTH_MM, heightMm: LABEL_74X22_PAGE_HEIGHT_MM/);
   assert.match(printServiceSource, /@page \{ size: \$\{pageSize\.widthMm\}mm \$\{pageSize\.heightMm\}mm; margin: 0; \}/);
+});
+
+test('print mode removes non-print UI from layout so hidden content cannot create blank pages', () => {
+  assert.match(isolationSource, /\.qr-page > :not\(\.printing-workspace\)/);
+  assert.match(isolationSource, /\.printing-grid > :not\(\.printing-panel--preview\)/);
+  assert.match(isolationSource, /\.printing-panel--preview > :not\(\.label-preview-shell\)/);
+  assert.match(isolationSource, /display: none !important/);
+  assert.match(isolationSource, /\.page-content,[\s\S]*?\.label-preview-scale \{[\s\S]*?min-height: 0 !important;[\s\S]*?margin: 0 !important;[\s\S]*?padding: 0 !important;/);
+  assert.match(qrPageSource, /import '\.\.\/printing\/printIsolation\.css';/);
 });
 
 test('screen preview and print share the same row-page geometry variables', () => {
