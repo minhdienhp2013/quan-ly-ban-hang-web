@@ -9,7 +9,7 @@ type NavigationItem = {
 
 const navigation: NavigationItem[] = [
   { to: '/', label: 'Tổng quan' },
-  { to: '/products', label: 'Sản phẩm' },
+  { to: '/products', label: 'Hàng hóa' },
   { to: '/customers', label: 'Khách hàng' },
   { to: '/suppliers', label: 'Nhà cung cấp' },
   { to: '/sales', label: 'Bán hàng' },
