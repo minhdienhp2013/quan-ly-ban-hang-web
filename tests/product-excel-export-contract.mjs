@@ -2,14 +2,15 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import test from 'node:test';
-import typescript from 'typescript';
 import * as XLSX from 'xlsx';
 
-const { transpileModule } = typescript;
 const require = createRequire(import.meta.url);
+const typescript = require('typescript');
+const transpileModule = typescript.transpileModule ?? typescript.default?.transpileModule;
 const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
 
 function loadTsModule(path) {
+  assert.equal(typeof transpileModule, 'function', 'TypeScript transpileModule must be available');
   const source = read(path);
   const output = transpileModule(source, {
     compilerOptions: {
