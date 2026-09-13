@@ -13,15 +13,40 @@ import { subscribeStoreSettings } from './settingsReader';
 
 interface PrintWorkspaceProps {
   products: Product[];
+  initialQuantities?: Readonly<Record<string, number>>;
+}
+
+export function sanitizeInitialQuantities(
+  products: readonly Product[],
+  initialQuantities: unknown,
+): Record<string, number> {
+  if (!initialQuantities || typeof initialQuantities !== 'object' || Array.isArray(initialQuantities)) {
+    return {};
+  }
+
+  const productIds = new Set(products.map((product) => product.id));
+  const sanitized: Record<string, number> = {};
+
+  for (const [productId, rawQuantity] of Object.entries(initialQuantities)) {
+    if (!productIds.has(productId) || typeof rawQuantity !== 'number' || !Number.isFinite(rawQuantity)) {
+      continue;
+    }
+
+    sanitized[productId] = Math.max(0, Math.min(999, Math.floor(rawQuantity)));
+  }
+
+  return sanitized;
 }
 
 function cloneConfig(config: LabelPaperConfig): LabelPaperConfig {
   return { ...config };
 }
 
-export default function PrintWorkspace({ products }: PrintWorkspaceProps) {
+export default function PrintWorkspace({ products, initialQuantities }: PrintWorkspaceProps) {
   const [query, setQuery] = useState('');
-  const [quantities, setQuantities] = useState<Record<string, number>>({});
+  const [quantities, setQuantities] = useState<Record<string, number>>(
+    () => sanitizeInitialQuantities(products, initialQuantities),
+  );
   const [config, setConfig] = useState<LabelPaperConfig>(() => cloneConfig(DEFAULT_LABEL_CONFIG));
   const [settings, setSettings] = useState<StoreSettings | null>(null);
   const [printError, setPrintError] = useState('');
