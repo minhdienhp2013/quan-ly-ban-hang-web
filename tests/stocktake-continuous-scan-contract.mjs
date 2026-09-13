@@ -1,46 +1,14 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import vm from 'node:vm';
-import { createRequire } from 'node:module';
 import test from 'node:test';
-import * as ts from 'typescript';
-
-const require = createRequire(import.meta.url);
-
-function loadSessionModule() {
-  const source = fs.readFileSync('src/modules/stocktake/stocktakeScanSession.ts', 'utf8');
-  const output = ts.transpileModule(source, {
-    compilerOptions: {
-      module: ts.ModuleKind.CommonJS,
-      target: ts.ScriptTarget.ES2022,
-      strict: true,
-    },
-  }).outputText;
-
-  const module = { exports: {} };
-  const context = vm.createContext({
-    module,
-    exports: module.exports,
-    require,
-    console,
-    Object,
-    Number,
-    Math,
-    Set,
-    Error,
-  });
-  vm.runInContext(output, context, { filename: 'stocktakeScanSession.cjs' });
-  return module.exports;
-}
-
-const {
+import {
   createStocktakeScanSession,
   setConfirmedQuantity,
   adjustConfirmedQuantity,
   acceptResolvedStocktakeScan,
   undoLastAcceptedScan,
   toStocktakeCountInputs,
-} = loadSessionModule();
+} from '../src/modules/stocktake/stocktakeScanSession.ts';
 
 const productA = { id: 'A', active: true };
 const productB = { id: 'B', active: true };
@@ -152,7 +120,7 @@ test('undo stack empty is safe', () => {
   assert.equal(outcome.state, state);
 });
 
-test('quantity 999 increments to 1000 without layout/business cap', () => {
+test('quantity 999 increments to 1000 without business cap', () => {
   const state = createStocktakeScanSession({ A: 999 });
   const outcome = acceptResolvedStocktakeScan(state, productA);
   assert.equal(outcome.kind, 'accepted');
