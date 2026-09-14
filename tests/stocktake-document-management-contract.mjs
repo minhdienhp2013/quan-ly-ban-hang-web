@@ -11,12 +11,27 @@ import {
   getStocktakeTotals,
   resolveCreatorDisplay,
 } from '../src/modules/stocktake/stocktakeManagementViewModel.ts';
-import {
+
+const exportSourcePath = 'src/modules/stocktake/stocktakeExport.ts';
+const exportHarnessPath = 'src/modules/stocktake/.stocktakeExport.node-test.ts';
+let exportModule;
+try {
+  const exportSource = fs.readFileSync(exportSourcePath, 'utf8').replace(
+    "from './stocktakeManagementViewModel';",
+    "from './stocktakeManagementViewModel.ts';",
+  );
+  fs.writeFileSync(exportHarnessPath, exportSource);
+  exportModule = await import(`../${exportHarnessPath}?test=${Date.now()}`);
+} finally {
+  if (fs.existsSync(exportHarnessPath)) fs.unlinkSync(exportHarnessPath);
+}
+
+const {
   buildStocktakeFilename,
   buildStocktakeListFilename,
   createStocktakeListWorkbook,
   createStocktakeWorkbook,
-} from '../src/modules/stocktake/stocktakeExport.ts';
+} = exportModule;
 
 const baseItems = [
   { productId: 'A', systemQuantity: 10, actualQuantity: 8, difference: -2 },
@@ -187,7 +202,7 @@ test('list Excel workbook exports exactly the already-filtered list', () => {
 });
 
 test('Excel export module is pure and read-only', () => {
-  const source = fs.readFileSync('src/modules/stocktake/stocktakeExport.ts', 'utf8');
+  const source = fs.readFileSync(exportSourcePath, 'utf8');
   assert.doesNotMatch(source, /firebase\/database/);
   assert.doesNotMatch(source, /commitStockOperation/);
   assert.doesNotMatch(source, /createStocktakeDraft|updateStocktakeDraft|completeStocktake|cancelStocktakeDraft/);
