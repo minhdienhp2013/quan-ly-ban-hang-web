@@ -22,6 +22,7 @@ import {
 } from './purchaseManagementViewModel';
 import { cancelPurchase, createPurchase, subscribePurchases, type CreatePurchaseInput } from './purchaseService';
 import './purchases.css';
+import './purchaseSmartProductSearch.css';
 
 type EditorSession = { key: number; source: Purchase | null } | null;
 
@@ -132,8 +133,16 @@ export default function PurchasesPage() {
   useEffect(() => { setPage(1); }, [query, status, supplierId, fromDate, toDate, onlyMine]);
   useEffect(() => { if (pagination.page !== page) setPage(pagination.page); }, [pagination.page, page]);
   useEffect(() => {
-    if (selectedPurchaseId && !filteredPurchases.some((purchase) => purchase.id === selectedPurchaseId)) setSelectedPurchaseId(null);
-  }, [filteredPurchases, selectedPurchaseId]);
+    if (!selectedPurchaseId) return;
+    const existsInRealtimeSource = purchases.some((purchase) => purchase.id === selectedPurchaseId);
+    if (existsInRealtimeSource && !filteredPurchases.some((purchase) => purchase.id === selectedPurchaseId)) {
+      setSelectedPurchaseId(null);
+    }
+  }, [purchases, filteredPurchases, selectedPurchaseId]);
+  useEffect(() => {
+    if (!selectedPurchaseId || !purchases.some((purchase) => purchase.id === selectedPurchaseId)) return;
+    requestAnimationFrame(() => document.getElementById(`purchase-detail-${selectedPurchaseId}`)?.scrollIntoView({ block: 'nearest' }));
+  }, [purchases, selectedPurchaseId]);
   useEffect(() => {
     if (selectedPurchaseId) {
       detailWasOpenRef.current = true;
@@ -169,7 +178,16 @@ export default function PurchasesPage() {
     try {
       const purchase = await createPurchase(input, appUser.uid);
       setEditorSession(null);
-      setNotice(`Đã tạo ${purchase.code}, tăng tồn và ghi lịch sử kho an toàn.`);
+      setQuery('');
+      setStatus('all');
+      setSupplierId('');
+      setFromDate('');
+      setToDate('');
+      setOnlyMine(false);
+      setPage(1);
+      detailOpenerRef.current = null;
+      setSelectedPurchaseId(purchase.id);
+      setNotice(`Đã tạo ${purchase.code}. Phiếu mới sẽ mở ngay để bạn có thể in tem mã / QR.`);
     } finally {
       setCreating(false);
     }
@@ -248,7 +266,7 @@ export default function PurchasesPage() {
         <main className="purchase-main">
           <PurchaseToolbar query={query} filtersOpen={filtersOpen} activeFilterCount={activeFilterCount} exportDisabled={loading || hasLoadError} onQueryChange={(value) => { setQuery(value); setNotice(null); }} onToggleFilters={() => setFiltersOpen((current) => !current)} onCreate={() => openCreate()} onExport={handleExportList} />
 
-          {editorSession ? <PurchaseEditor key={editorSession.key} products={products} suppliers={suppliers} sourcePurchase={editorSession.source} busy={creating} onClose={() => { if (!creating) setEditorSession(null); }} onSubmit={handleCreate} /> : null}
+          {editorSession ? <PurchaseEditor key={editorSession.key} products={products} suppliers={suppliers} actorUid={appUser?.uid ?? ''} sourcePurchase={editorSession.source} busy={creating} onClose={() => { if (!creating) setEditorSession(null); }} onSubmit={handleCreate} /> : null}
 
           <section className="purchase-list-panel" aria-label="Danh sách phiếu nhập">
             <div className="purchase-list-heading"><span>{loading ? 'Đang tải phiếu nhập...' : hasLoadError ? 'Không thể tải đầy đủ dữ liệu nhập hàng' : `Hiển thị ${filteredPurchases.length} phiếu nhập hàng`}</span></div>
