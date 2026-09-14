@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import type { Product, Purchase, Supplier } from '../../types/models';
 import BarcodeScanner from '../qr/BarcodeScanner';
 import { findProductByScannedCode } from '../qr/productLookup';
@@ -88,12 +88,21 @@ export default function PurchaseEditor({
   const [scanError, setScanError] = useState('');
   const [quickAddTarget, setQuickAddTarget] = useState<QuickAddTarget | null>(null);
   const quantityInputRefs = useRef(new Map<string, HTMLInputElement>());
+  const contextPanelRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (createdProducts.length === 0) return;
     const subscribedIds = new Set(products.map((product) => product.id));
     setCreatedProducts((current) => current.filter((product) => !subscribedIds.has(product.id)));
   }, [products, createdProducts.length]);
+
+  useEffect(() => {
+    if (!scanTargetLineKey && !quickAddTarget) return undefined;
+    const frame = requestAnimationFrame(() => {
+      contextPanelRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [scanTargetLineKey, quickAddTarget]);
 
   const activeProductById = useMemo(() => new Map(activeProducts.map((product) => [product.id, product])), [activeProducts]);
   const unavailableLines = lines.filter((line) => line.productId && !activeProductById.has(line.productId));
@@ -227,51 +236,58 @@ export default function PurchaseEditor({
           {lines.map((line, index) => {
             const activeProduct = activeProductById.get(line.productId);
             const unavailable = Boolean(line.productId && !activeProduct);
+            const scanTitleId = `purchase-scan-title-${line.key}`;
             return (
-              <div className={`purchase-editor-line${unavailable ? ' is-unavailable' : ''}`} key={line.key}>
-                <div className="purchase-editor-product-field"><span className="purchase-mobile-label">Sản phẩm</span>
-                  <PurchaseProductPicker
-                    lineKey={line.key}
-                    products={availableProducts}
-                    productId={line.productId}
-                    historicalSku={line.historicalSku}
-                    historicalName={line.historicalName}
-                    disabled={busy}
-                    onSelect={(product) => selectProduct(line.key, product)}
-                    onClearSelection={() => patchLine(line.key, { productId: '', historicalSku: undefined, historicalName: undefined })}
-                    onScanRequest={openScanner}
-                    onQuickAddRequest={openQuickAdd}
-                  />
+              <Fragment key={line.key}>
+                <div className={`purchase-editor-line${unavailable ? ' is-unavailable' : ''}`}>
+                  <div className="purchase-editor-product-field"><span className="purchase-mobile-label">Sản phẩm</span>
+                    <PurchaseProductPicker
+                      lineKey={line.key}
+                      products={availableProducts}
+                      productId={line.productId}
+                      historicalSku={line.historicalSku}
+                      historicalName={line.historicalName}
+                      disabled={busy}
+                      onSelect={(product) => selectProduct(line.key, product)}
+                      onClearSelection={() => patchLine(line.key, { productId: '', historicalSku: undefined, historicalName: undefined })}
+                      onScanRequest={openScanner}
+                      onQuickAddRequest={openQuickAdd}
+                    />
+                  </div>
+                  <label><span className="purchase-mobile-label">Số lượng</span><input ref={(node) => { if (node) quantityInputRefs.current.set(line.key, node); else quantityInputRefs.current.delete(line.key); }} type="number" inputMode="decimal" min="0.001" step="0.001" value={line.quantity} onChange={(event) => patchLine(line.key, { quantity: Number(event.target.value) })} /></label>
+                  <label><span className="purchase-mobile-label">Giá nhập</span><input type="number" inputMode="numeric" min="0" step="1" value={line.unitCost} onChange={(event) => patchLine(line.key, { unitCost: Number(event.target.value) })} /></label>
+                  <strong className="purchase-editor-line-total">{money(line.quantity * line.unitCost)} đ</strong>
+                  <button className="purchase-editor-remove" type="button" onClick={() => removeLine(line.key)} disabled={busy || lines.length === 1} aria-label={`Xóa dòng ${index + 1}`}>×</button>
                 </div>
-                <label><span className="purchase-mobile-label">Số lượng</span><input ref={(node) => { if (node) quantityInputRefs.current.set(line.key, node); else quantityInputRefs.current.delete(line.key); }} type="number" inputMode="decimal" min="0.001" step="0.001" value={line.quantity} onChange={(event) => patchLine(line.key, { quantity: Number(event.target.value) })} /></label>
-                <label><span className="purchase-mobile-label">Giá nhập</span><input type="number" inputMode="numeric" min="0" step="1" value={line.unitCost} onChange={(event) => patchLine(line.key, { unitCost: Number(event.target.value) })} /></label>
-                <strong className="purchase-editor-line-total">{money(line.quantity * line.unitCost)} đ</strong>
-                <button className="purchase-editor-remove" type="button" onClick={() => removeLine(line.key)} disabled={busy || lines.length === 1} aria-label={`Xóa dòng ${index + 1}`}>×</button>
-              </div>
+
+                {scanTargetLineKey === line.key ? (
+                  <div className="purchase-editor-context-panel" ref={contextPanelRef}>
+                    <section className="purchase-scan-panel" aria-labelledby={scanTitleId}>
+                      <div className="purchase-scan-heading">
+                        <div><h3 id={scanTitleId}>Quét sản phẩm cho dòng {index + 1}</h3><p className="muted">Chỉ mã QR, barcode hoặc SKU chính xác mới được chọn.</p></div>
+                        <button className="button button--secondary purchase-touch" type="button" onClick={() => { setScanTargetLineKey(null); setScanError(''); }}>Đóng camera</button>
+                      </div>
+                      {scanError ? <p className="form-error" role="alert">{scanError}</p> : null}
+                      <BarcodeScanner onScan={(result) => handleScan(result.value)} />
+                    </section>
+                  </div>
+                ) : null}
+
+                {quickAddTarget?.lineKey === line.key ? (
+                  <div className="purchase-editor-context-panel" ref={contextPanelRef}>
+                    <PurchaseQuickAddProduct
+                      products={availableProducts}
+                      actorUid={actorUid}
+                      initialName={quickAddTarget.initialName}
+                      onCreated={handleQuickProductCreated}
+                      onClose={() => setQuickAddTarget(null)}
+                    />
+                  </div>
+                ) : null}
+              </Fragment>
             );
           })}
         </div>
-
-        {scanTargetLineKey ? (
-          <section className="purchase-scan-panel" aria-labelledby="purchase-scan-title">
-            <div className="purchase-scan-heading">
-              <div><h3 id="purchase-scan-title">Quét sản phẩm cho dòng nhập hàng</h3><p className="muted">Chỉ mã QR, barcode hoặc SKU chính xác mới được chọn.</p></div>
-              <button className="button button--secondary purchase-touch" type="button" onClick={() => { setScanTargetLineKey(null); setScanError(''); }}>Đóng camera</button>
-            </div>
-            {scanError ? <p className="form-error" role="alert">{scanError}</p> : null}
-            <BarcodeScanner onScan={(result) => handleScan(result.value)} />
-          </section>
-        ) : null}
-
-        {quickAddTarget ? (
-          <PurchaseQuickAddProduct
-            products={availableProducts}
-            actorUid={actorUid}
-            initialName={quickAddTarget.initialName}
-            onCreated={handleQuickProductCreated}
-            onClose={() => setQuickAddTarget(null)}
-          />
-        ) : null}
 
         <div className="purchase-editor-add"><button className="button button--secondary purchase-touch" type="button" onClick={() => setLines((current) => [...current, emptyLine()])} disabled={busy}>+ Thêm dòng</button></div>
 
