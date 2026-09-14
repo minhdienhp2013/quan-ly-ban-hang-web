@@ -69,7 +69,7 @@ test('Products search keeps dimension-like 3cm separate from 3c shorthand', () =
   const cabinet = product();
   const dimension = product({
     id: 'dimension',
-    sku: 'THANH-3CM',
+    sku: 'THANH-DIM',
     name: 'Thanh nhựa 3cm',
     barcode: undefined,
     qrCode: undefined,
