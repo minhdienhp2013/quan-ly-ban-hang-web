@@ -11,7 +11,7 @@ export interface SearchForms {
 const NAME_SEPARATOR_PATTERN = /[\s\-_.\/\\]+/g;
 const COMBINING_MARKS_PATTERN = /[\u0300-\u036f]/g;
 const NUMBER_C_PATTERN = /^(\d+)c$/;
-const NUMBER_C_COMPACT_PATTERN = /(\d+)c(?=[a-z]|$)/g;
+const NUMBER_C_COMPACT_PATTERN = /(\d+)c(?!anh)(?=[a-z]|$)/g;
 
 function removeVietnameseDiacritics(value: string) {
   return value
