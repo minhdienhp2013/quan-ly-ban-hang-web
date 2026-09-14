@@ -14,8 +14,10 @@ import {
   buildPrintingInitialQuantities,
   filterPurchases,
   getLocalDayBoundary,
+  isPurchaseDataLoading,
   paginatePurchases,
   resolveCreatorDisplay,
+  type PurchaseSourceLoadState,
   type PurchaseStatusFilter,
 } from './purchaseManagementViewModel';
 import { cancelPurchase, createPurchase, subscribePurchases, type CreatePurchaseInput } from './purchaseService';
@@ -29,9 +31,9 @@ export default function PurchasesPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [purchases, setPurchases] = useState<Purchase[]>([]);
-  const [purchasesReady, setPurchasesReady] = useState(false);
-  const [productsReady, setProductsReady] = useState(false);
-  const [suppliersReady, setSuppliersReady] = useState(false);
+  const [purchasesLoadState, setPurchasesLoadState] = useState<PurchaseSourceLoadState>('pending');
+  const [productsLoadState, setProductsLoadState] = useState<PurchaseSourceLoadState>('pending');
+  const [suppliersLoadState, setSuppliersLoadState] = useState<PurchaseSourceLoadState>('pending');
   const [query, setQuery] = useState('');
   const [status, setStatus] = useState<PurchaseStatusFilter>('all');
   const [supplierId, setSupplierId] = useState('');
@@ -51,16 +53,56 @@ export default function PurchasesPage() {
   const detailWasOpenRef = useRef(false);
 
   useEffect(() => {
-    const onError = (cause: Error) => setError(cause.message);
+    let unsubPurchases: (() => void) | undefined;
+    let unsubProducts: (() => void) | undefined;
+    let unsubSuppliers: (() => void) | undefined;
+
+    const sourceError = (
+      label: string,
+      setLoadState: (state: PurchaseSourceLoadState) => void,
+    ) => (cause: Error) => {
+      setLoadState('error');
+      setError(`Không thể tải ${label}: ${cause.message}`);
+    };
+
     try {
-      const unsubPurchases = subscribePurchases((next) => { setPurchases(next); setPurchasesReady(true); }, onError);
-      const unsubProducts = subscribeProducts((next) => { setProducts(next); setProductsReady(true); }, onError);
-      const unsubSuppliers = subscribeSuppliers((next) => { setSuppliers(next); setSuppliersReady(true); }, onError);
-      return () => { unsubPurchases(); unsubProducts(); unsubSuppliers(); };
+      unsubPurchases = subscribePurchases(
+        (next) => {
+          setPurchases(next);
+          setPurchasesLoadState((current) => current === 'error' ? current : 'ready');
+        },
+        sourceError('phiếu nhập', setPurchasesLoadState),
+      );
+      unsubProducts = subscribeProducts(
+        (next) => {
+          setProducts(next);
+          setProductsLoadState((current) => current === 'error' ? current : 'ready');
+        },
+        sourceError('sản phẩm', setProductsLoadState),
+      );
+      unsubSuppliers = subscribeSuppliers(
+        (next) => {
+          setSuppliers(next);
+          setSuppliersLoadState((current) => current === 'error' ? current : 'ready');
+        },
+        sourceError('nhà cung cấp', setSuppliersLoadState),
+      );
     } catch (cause) {
-      onError(cause instanceof Error ? cause : new Error('Không thể kết nối dữ liệu nhập hàng.'));
+      unsubPurchases?.();
+      unsubProducts?.();
+      unsubSuppliers?.();
+      setPurchasesLoadState('error');
+      setProductsLoadState('error');
+      setSuppliersLoadState('error');
+      setError(cause instanceof Error ? cause.message : 'Không thể kết nối dữ liệu nhập hàng.');
       return undefined;
     }
+
+    return () => {
+      unsubPurchases?.();
+      unsubProducts?.();
+      unsubSuppliers?.();
+    };
   }, []);
 
   const fromBoundary = getLocalDayBoundary(fromDate, 'start');
@@ -78,7 +120,13 @@ export default function PurchasesPage() {
   }), [purchases, suppliers, query, status, supplierId, fromDate, toDate, onlyMine, appUser?.uid]);
 
   const pagination = useMemo(() => paginatePurchases(filteredPurchases, page, pageSize), [filteredPurchases, page, pageSize]);
-  const loading = !purchasesReady || !productsReady || !suppliersReady;
+  const loadState = {
+    purchases: purchasesLoadState,
+    products: productsLoadState,
+    suppliers: suppliersLoadState,
+  };
+  const loading = isPurchaseDataLoading(loadState);
+  const hasLoadError = Object.values(loadState).some((state) => state === 'error');
   const activeFilterCount = Number(status !== 'all') + Number(Boolean(supplierId)) + Number(Boolean(fromDate || toDate)) + Number(onlyMine);
 
   useEffect(() => { setPage(1); }, [query, status, supplierId, fromDate, toDate, onlyMine]);
@@ -198,23 +246,25 @@ export default function PurchasesPage() {
         <PurchaseFilters open={filtersOpen} status={status} supplierId={supplierId} fromDate={fromDate} toDate={toDate} onlyMine={onlyMine} suppliers={suppliers} onStatusChange={setStatus} onSupplierChange={setSupplierId} onFromDateChange={setFromDate} onToDateChange={setToDate} onOnlyMineChange={setOnlyMine} onClear={clearFilters} />
 
         <main className="purchase-main">
-          <PurchaseToolbar query={query} filtersOpen={filtersOpen} activeFilterCount={activeFilterCount} exportDisabled={loading} onQueryChange={(value) => { setQuery(value); setNotice(null); }} onToggleFilters={() => setFiltersOpen((current) => !current)} onCreate={() => openCreate()} onExport={handleExportList} />
+          <PurchaseToolbar query={query} filtersOpen={filtersOpen} activeFilterCount={activeFilterCount} exportDisabled={loading || hasLoadError} onQueryChange={(value) => { setQuery(value); setNotice(null); }} onToggleFilters={() => setFiltersOpen((current) => !current)} onCreate={() => openCreate()} onExport={handleExportList} />
 
           {editorSession ? <PurchaseEditor key={editorSession.key} products={products} suppliers={suppliers} sourcePurchase={editorSession.source} busy={creating} onClose={() => { if (!creating) setEditorSession(null); }} onSubmit={handleCreate} /> : null}
 
           <section className="purchase-list-panel" aria-label="Danh sách phiếu nhập">
-            <div className="purchase-list-heading"><span>{loading ? 'Đang tải phiếu nhập...' : `Hiển thị ${filteredPurchases.length} phiếu nhập hàng`}</span></div>
+            <div className="purchase-list-heading"><span>{loading ? 'Đang tải phiếu nhập...' : hasLoadError ? 'Không thể tải đầy đủ dữ liệu nhập hàng' : `Hiển thị ${filteredPurchases.length} phiếu nhập hàng`}</span></div>
             {invalidDateRange ? <p className="form-error purchase-inline-error" role="alert">Từ ngày không được sau Đến ngày.</p> : null}
 
             {loading ? (
               <div className="purchase-empty">Đang tải dữ liệu nhập hàng...</div>
+            ) : hasLoadError ? (
+              <div className="purchase-empty purchase-load-error" role="status"><strong>Không thể tải đầy đủ dữ liệu nhập hàng.</strong><span>Vui lòng xem lỗi phía trên và thử tải lại trang.</span></div>
             ) : filteredPurchases.length === 0 ? (
               <div className="purchase-empty"><strong>{purchases.length === 0 ? 'Chưa có phiếu nhập.' : 'Không có phiếu phù hợp bộ lọc.'}</strong><span>{purchases.length === 0 ? 'Bấm “+ Nhập hàng” để tạo phiếu đầu tiên.' : 'Thử thay đổi từ khóa hoặc đặt lại bộ lọc.'}</span></div>
             ) : (
               <><PurchaseTable {...listProps} /><PurchaseResponsiveList {...listProps} /></>
             )}
 
-            {!loading && filteredPurchases.length > 0 ? (
+            {!loading && !hasLoadError && filteredPurchases.length > 0 ? (
               <div className="purchase-pagination">
                 <label>Hiển thị <select value={pageSize} onChange={(event) => { setPageSize(Number(event.target.value)); setPage(1); closeDetail(); }}><option value={5}>5</option><option value={10}>10</option><option value={20}>20</option></select> / trang</label>
                 <span>Trang {pagination.page}/{pagination.totalPages} · {pagination.totalRows} phiếu</span>
