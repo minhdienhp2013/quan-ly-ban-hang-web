@@ -2,7 +2,21 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import test from 'node:test';
 import { normalizeSearchCode, normalizeSearchText } from '../src/shared/search/searchNormalization.ts';
-import { searchPurchaseProducts } from '../src/modules/purchases/purchaseProductSearch.ts';
+
+const productSearchSourcePath = 'src/modules/purchases/purchaseProductSearch.ts';
+const productSearchHarnessPath = 'src/modules/purchases/.purchaseProductSearch.node-test.ts';
+let productSearchModule;
+try {
+  const productSearchSource = fs.readFileSync(productSearchSourcePath, 'utf8').replace(
+    "from '../../shared/search/searchNormalization';",
+    "from '../../shared/search/searchNormalization.ts';",
+  );
+  fs.writeFileSync(productSearchHarnessPath, productSearchSource);
+  productSearchModule = await import(`../${productSearchHarnessPath}?test=${Date.now()}`);
+} finally {
+  if (fs.existsSync(productSearchHarnessPath)) fs.unlinkSync(productSearchHarnessPath);
+}
+const { searchPurchaseProducts } = productSearchModule;
 
 function product(overrides = {}) {
   return {
@@ -120,7 +134,7 @@ test('quick add reuses Product create contract and auto-selects returned Product
   const editor = fs.readFileSync('src/modules/purchases/PurchaseEditor.tsx', 'utf8');
   assert.match(quickAdd, /createProduct\(toProductInput\(form\), actorUid\)/);
   assert.match(quickAdd, /onCreated\(created\)/);
-  assert.doesNotMatch(quickAdd, /firebase\/database|ref\(|update\(/);
+  assert.doesNotMatch(quickAdd, /firebase\/database|\bref\(|\bupdate\(/);
   assert.match(editor, /handleQuickProductCreated/);
   assert.match(editor, /selectProduct\(targetLineKey, product\)/);
   assert.match(editor, /setCreatedProducts/);
@@ -153,5 +167,5 @@ test('responsive smart product row keeps search flexible and scan/plus at 44px',
   assert.match(css, /\.purchase-product-icon-button\{[^}]*width:44px[^}]*height:44px/);
   assert.match(css, /\.purchase-product-results\{[^}]*max-width:100%/);
   assert.match(css, /@media\(max-width:430px\)/);
-  assert.match(css, /@media\(max-width:1100px\)[^{]*\{[^}]*\.purchase-editor-product-field\{grid-column:1\/-1\}/);
+  assert.match(css, /@media\(max-width:1100px\)\{\.purchase-editor-product-field\{grid-column:1\/-1\}/);
 });
