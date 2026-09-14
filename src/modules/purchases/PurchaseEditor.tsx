@@ -1,8 +1,14 @@
-import { useMemo, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import type { Product, Purchase, Supplier } from '../../types/models';
+import BarcodeScanner from '../qr/BarcodeScanner';
+import { findProductByScannedCode } from '../qr/productLookup';
+import '../qr/qr.css';
+import PurchaseProductPicker from './PurchaseProductPicker';
+import PurchaseQuickAddProduct from './PurchaseQuickAddProduct';
 import type { CreatePurchaseInput } from './purchaseService';
 
 interface EditorLine {
+  key: string;
   productId: string;
   quantity: number;
   unitCost: number;
@@ -13,19 +19,32 @@ interface EditorLine {
 interface PurchaseEditorProps {
   products: readonly Product[];
   suppliers: readonly Supplier[];
+  actorUid: string;
   sourcePurchase?: Purchase | null;
   busy: boolean;
   onClose: () => void;
   onSubmit: (input: CreatePurchaseInput) => Promise<void>;
 }
 
+interface QuickAddTarget {
+  lineKey: string;
+  initialName: string;
+}
+
+let editorLineSequence = 0;
+function nextLineKey() {
+  editorLineSequence += 1;
+  return `purchase-line-${editorLineSequence}`;
+}
+
 function emptyLine(): EditorLine {
-  return { productId: '', quantity: 1, unitCost: 0 };
+  return { key: nextLineKey(), productId: '', quantity: 1, unitCost: 0 };
 }
 
 function initialLines(source?: Purchase | null): EditorLine[] {
   if (!source || !Array.isArray(source.items) || source.items.length === 0) return [emptyLine()];
   return source.items.map((item) => ({
+    key: nextLineKey(),
     productId: item.productId,
     quantity: Number(item.quantity) || 0,
     unitCost: Number(item.unitCost) || 0,
@@ -41,12 +60,21 @@ function money(value: number) {
 export default function PurchaseEditor({
   products,
   suppliers,
+  actorUid,
   sourcePurchase,
   busy,
   onClose,
   onSubmit,
 }: PurchaseEditorProps) {
-  const activeProducts = useMemo(() => products.filter((product) => product.active), [products]);
+  const [createdProducts, setCreatedProducts] = useState<Product[]>([]);
+  const availableProducts = useMemo(() => {
+    const byId = new Map(products.map((product) => [product.id, product]));
+    for (const product of createdProducts) {
+      if (!byId.has(product.id)) byId.set(product.id, product);
+    }
+    return [...byId.values()];
+  }, [products, createdProducts]);
+  const activeProducts = useMemo(() => availableProducts.filter((product) => product.active), [availableProducts]);
   const activeSuppliers = useMemo(() => suppliers.filter((supplier) => supplier.active), [suppliers]);
   const copiedSupplier = sourcePurchase?.supplierId
     ? activeSuppliers.find((supplier) => supplier.id === sourcePurchase.supplierId)
@@ -56,13 +84,87 @@ export default function PurchaseEditor({
   const [note, setNote] = useState(sourcePurchase?.note || '');
   const [lines, setLines] = useState<EditorLine[]>(() => initialLines(sourcePurchase));
   const [error, setError] = useState('');
+  const [scanTargetLineKey, setScanTargetLineKey] = useState<string | null>(null);
+  const [scanError, setScanError] = useState('');
+  const [quickAddTarget, setQuickAddTarget] = useState<QuickAddTarget | null>(null);
+  const quantityInputRefs = useRef(new Map<string, HTMLInputElement>());
+
+  useEffect(() => {
+    if (createdProducts.length === 0) return;
+    const subscribedIds = new Set(products.map((product) => product.id));
+    setCreatedProducts((current) => current.filter((product) => !subscribedIds.has(product.id)));
+  }, [products, createdProducts.length]);
 
   const activeProductById = useMemo(() => new Map(activeProducts.map((product) => [product.id, product])), [activeProducts]);
   const unavailableLines = lines.filter((line) => line.productId && !activeProductById.has(line.productId));
   const total = lines.reduce((sum, line) => sum + (Number(line.quantity) || 0) * (Number(line.unitCost) || 0), 0);
 
-  function patchLine(index: number, patch: Partial<EditorLine>) {
-    setLines((current) => current.map((line, currentIndex) => currentIndex === index ? { ...line, ...patch } : line));
+  function patchLine(lineKey: string, patch: Partial<EditorLine>) {
+    setLines((current) => current.map((line) => line.key === lineKey ? { ...line, ...patch } : line));
+  }
+
+  function focusQuantity(lineKey: string) {
+    requestAnimationFrame(() => quantityInputRefs.current.get(lineKey)?.focus());
+  }
+
+  function selectProduct(lineKey: string, product: Product) {
+    patchLine(lineKey, {
+      productId: product.id,
+      unitCost: product.costPrice,
+      historicalSku: undefined,
+      historicalName: undefined,
+    });
+    setError('');
+    focusQuantity(lineKey);
+  }
+
+  function removeLine(lineKey: string) {
+    if (scanTargetLineKey === lineKey) {
+      setScanTargetLineKey(null);
+      setScanError('');
+    }
+    if (quickAddTarget?.lineKey === lineKey) setQuickAddTarget(null);
+    quantityInputRefs.current.delete(lineKey);
+    setLines((current) => current.filter((line) => line.key !== lineKey));
+  }
+
+  function openScanner(lineKey: string) {
+    setQuickAddTarget(null);
+    setScanError('');
+    setScanTargetLineKey(lineKey);
+  }
+
+  function handleScan(rawCode: string) {
+    const code = rawCode.trim();
+    if (!scanTargetLineKey || !code) return;
+    const match = findProductByScannedCode([...availableProducts], code);
+    if (!match) {
+      setScanError(`Không tìm thấy sản phẩm có mã ${code}.`);
+      return;
+    }
+    if (!match.product.active) {
+      setScanError('Sản phẩm đã ngừng sử dụng.');
+      return;
+    }
+
+    const targetLineKey = scanTargetLineKey;
+    selectProduct(targetLineKey, match.product);
+    setScanTargetLineKey(null);
+    setScanError('');
+  }
+
+  function openQuickAdd(lineKey: string, query: string) {
+    setScanTargetLineKey(null);
+    setScanError('');
+    setQuickAddTarget({ lineKey, initialName: query.trim() });
+  }
+
+  function handleQuickProductCreated(product: Product) {
+    if (!quickAddTarget) return;
+    const targetLineKey = quickAddTarget.lineKey;
+    setCreatedProducts((current) => current.some((item) => item.id === product.id) ? current : [...current, product]);
+    selectProduct(targetLineKey, product);
+    setQuickAddTarget(null);
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -126,30 +228,50 @@ export default function PurchaseEditor({
             const activeProduct = activeProductById.get(line.productId);
             const unavailable = Boolean(line.productId && !activeProduct);
             return (
-              <div className={`purchase-editor-line${unavailable ? ' is-unavailable' : ''}`} key={`${index}-${line.productId}`}>
-                <label><span className="purchase-mobile-label">Sản phẩm</span>
-                  <select value={line.productId} onChange={(event) => {
-                    const product = activeProductById.get(event.target.value);
-                    patchLine(index, {
-                      productId: event.target.value,
-                      unitCost: product?.costPrice ?? 0,
-                      historicalSku: undefined,
-                      historicalName: undefined,
-                    });
-                  }}>
-                    <option value="">Chọn sản phẩm</option>
-                    {unavailable ? <option value={line.productId}>{line.historicalSku || line.productId} - {line.historicalName || 'Sản phẩm cũ'} (không khả dụng)</option> : null}
-                    {activeProducts.map((product) => <option key={product.id} value={product.id}>{product.sku} - {product.name}</option>)}
-                  </select>
+              <div className={`purchase-editor-line${unavailable ? ' is-unavailable' : ''}`} key={line.key}>
+                <label className="purchase-editor-product-field"><span className="purchase-mobile-label">Sản phẩm</span>
+                  <PurchaseProductPicker
+                    lineKey={line.key}
+                    products={availableProducts}
+                    productId={line.productId}
+                    historicalSku={line.historicalSku}
+                    historicalName={line.historicalName}
+                    disabled={busy}
+                    onSelect={(product) => selectProduct(line.key, product)}
+                    onClearSelection={() => patchLine(line.key, { productId: '', historicalSku: undefined, historicalName: undefined })}
+                    onScanRequest={openScanner}
+                    onQuickAddRequest={openQuickAdd}
+                  />
                 </label>
-                <label><span className="purchase-mobile-label">Số lượng</span><input type="number" inputMode="decimal" min="0.001" step="0.001" value={line.quantity} onChange={(event) => patchLine(index, { quantity: Number(event.target.value) })} /></label>
-                <label><span className="purchase-mobile-label">Giá nhập</span><input type="number" inputMode="numeric" min="0" step="1" value={line.unitCost} onChange={(event) => patchLine(index, { unitCost: Number(event.target.value) })} /></label>
+                <label><span className="purchase-mobile-label">Số lượng</span><input ref={(node) => { if (node) quantityInputRefs.current.set(line.key, node); else quantityInputRefs.current.delete(line.key); }} type="number" inputMode="decimal" min="0.001" step="0.001" value={line.quantity} onChange={(event) => patchLine(line.key, { quantity: Number(event.target.value) })} /></label>
+                <label><span className="purchase-mobile-label">Giá nhập</span><input type="number" inputMode="numeric" min="0" step="1" value={line.unitCost} onChange={(event) => patchLine(line.key, { unitCost: Number(event.target.value) })} /></label>
                 <strong className="purchase-editor-line-total">{money(line.quantity * line.unitCost)} đ</strong>
-                <button className="purchase-editor-remove" type="button" onClick={() => setLines((current) => current.filter((_, currentIndex) => currentIndex !== index))} disabled={busy || lines.length === 1} aria-label={`Xóa dòng ${index + 1}`}>×</button>
+                <button className="purchase-editor-remove" type="button" onClick={() => removeLine(line.key)} disabled={busy || lines.length === 1} aria-label={`Xóa dòng ${index + 1}`}>×</button>
               </div>
             );
           })}
         </div>
+
+        {scanTargetLineKey ? (
+          <section className="purchase-scan-panel" aria-labelledby="purchase-scan-title">
+            <div className="purchase-scan-heading">
+              <div><h3 id="purchase-scan-title">Quét sản phẩm cho dòng nhập hàng</h3><p className="muted">Chỉ mã QR, barcode hoặc SKU chính xác mới được chọn.</p></div>
+              <button className="button button--secondary purchase-touch" type="button" onClick={() => { setScanTargetLineKey(null); setScanError(''); }}>Đóng camera</button>
+            </div>
+            {scanError ? <p className="form-error" role="alert">{scanError}</p> : null}
+            <BarcodeScanner onScan={(result) => handleScan(result.value)} />
+          </section>
+        ) : null}
+
+        {quickAddTarget ? (
+          <PurchaseQuickAddProduct
+            products={availableProducts}
+            actorUid={actorUid}
+            initialName={quickAddTarget.initialName}
+            onCreated={handleQuickProductCreated}
+            onClose={() => setQuickAddTarget(null)}
+          />
+        ) : null}
 
         <div className="purchase-editor-add"><button className="button button--secondary purchase-touch" type="button" onClick={() => setLines((current) => [...current, emptyLine()])} disabled={busy}>+ Thêm dòng</button></div>
 
