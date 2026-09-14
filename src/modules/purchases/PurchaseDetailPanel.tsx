@@ -92,7 +92,7 @@ export default function PurchaseDetailPanel({
 
       <div className="purchase-detail-actions">
         <button className="button button--secondary purchase-touch" type="button" disabled={busy} onClick={() => onExport(purchase)}>Xuất Excel</button>
-        {actions.print ? <button className="button button--secondary purchase-touch" type="button" disabled={busy} onClick={() => onPrint(purchase)}>In tem hàng</button> : null}
+        {actions.print ? <button className="button button--secondary purchase-touch" type="button" disabled={busy} onClick={() => onPrint(purchase)}>In tem mã / QR</button> : null}
         <button className="button button--secondary purchase-touch" type="button" disabled={busy} onClick={() => onCopy(purchase)}>{purchase.status === 'completed' ? 'Sao chép để sửa' : 'Sao chép thành phiếu mới'}</button>
         {actions.cancel ? <button className="button button--danger purchase-touch" type="button" disabled={busy} onClick={() => onCancel(purchase)}>{busy ? 'Đang hoàn nhập...' : 'Hủy / hoàn nhập toàn bộ'}</button> : null}
       </div>
