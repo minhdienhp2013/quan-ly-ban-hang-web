@@ -25,9 +25,11 @@ import {
   subscribeStocktakes,
   updateStocktakeDraft,
 } from './stocktakeService';
+import StocktakeManagement from './StocktakeManagement';
 
 type EntryMode = 'manual' | 'scan';
 type ScanPhase = 'scanning' | 'review';
+type StocktakeWorkspace = 'new' | 'manage';
 type ScanFeedback =
   | {
       kind: 'success';
@@ -47,10 +49,6 @@ type SafariAudioWindow = Window & {
   webkitAudioContext?: typeof AudioContext;
 };
 
-function dateTime(value: number) {
-  return new Intl.DateTimeFormat('vi-VN', { dateStyle: 'short', timeStyle: 'short' }).format(value);
-}
-
 function formatQuantity(value: number) {
   return new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 3 }).format(value);
 }
@@ -63,6 +61,10 @@ export default function StocktakePage() {
   const { appUser } = useAuth();
   const [products, setProducts] = useState<Product[]>([]);
   const [stocktakes, setStocktakes] = useState<Stocktake[]>([]);
+  const [productsReady, setProductsReady] = useState(false);
+  const [stocktakesReady, setStocktakesReady] = useState(false);
+  const [workspace, setWorkspace] = useState<StocktakeWorkspace>('new');
+  const [selectedStocktakeId, setSelectedStocktakeId] = useState<string | null>(null);
   const [session, setSessionState] = useState<StocktakeScanSessionState>(() => createStocktakeScanSession());
   const sessionRef = useRef(session);
   const [entryMode, setEntryMode] = useState<EntryMode>('manual');
@@ -78,16 +80,35 @@ export default function StocktakePage() {
   const [success, setSuccess] = useState<string | null>(null);
 
   useEffect(() => {
-    const onError = (cause: Error) => setError(cause.message);
     try {
-      const unsubProducts = subscribeProducts(setProducts, onError);
-      const unsubStocktakes = subscribeStocktakes(setStocktakes, onError);
+      const unsubProducts = subscribeProducts(
+        (next) => {
+          setProducts(next);
+          setProductsReady(true);
+        },
+        (cause) => {
+          setProductsReady(true);
+          setError(cause.message);
+        },
+      );
+      const unsubStocktakes = subscribeStocktakes(
+        (next) => {
+          setStocktakes(next);
+          setStocktakesReady(true);
+        },
+        (cause) => {
+          setStocktakesReady(true);
+          setError(cause.message);
+        },
+      );
       return () => {
         unsubProducts();
         unsubStocktakes();
       };
     } catch (cause) {
-      onError(cause instanceof Error ? cause : new Error('Không thể kết nối dữ liệu kiểm kê.'));
+      setProductsReady(true);
+      setStocktakesReady(true);
+      setError(cause instanceof Error ? cause.message : 'Không thể kết nối dữ liệu kiểm kê.');
       return undefined;
     }
   }, []);
@@ -98,18 +119,19 @@ export default function StocktakePage() {
     if (context && context.state !== 'closed') void context.close().catch(() => undefined);
   }, []);
 
-  const currentDraft = editingId
-    ? stocktakes.find((item) => item.id === editingId && item.status === 'draft')
+  const editingStocktake = editingId
+    ? stocktakes.find((item) => item.id === editingId)
     : undefined;
+  const currentDraft = editingStocktake?.status === 'draft' ? editingStocktake : undefined;
 
   const draftProductIds = useMemo(
-    () => currentDraft ? new Set(currentDraft.items.map((item) => item.productId)) : undefined,
-    [currentDraft],
+    () => editingStocktake ? new Set(editingStocktake.items.map((item) => item.productId)) : undefined,
+    [editingStocktake],
   );
 
   const draftSystemQuantity = useMemo(
-    () => new Map(currentDraft?.items.map((item) => [item.productId, item.systemQuantity]) ?? []),
-    [currentDraft],
+    () => new Map(editingStocktake?.items.map((item) => [item.productId, item.systemQuantity]) ?? []),
+    [editingStocktake],
   );
 
   const visibleProducts = useMemo(() => {
@@ -195,6 +217,13 @@ export default function StocktakePage() {
     setSuccess(null);
   }
 
+  function selectWorkspace(next: StocktakeWorkspace) {
+    if (next === 'manage' && entryMode === 'scan' && scanPhase === 'scanning') {
+      setScanPhase('review');
+    }
+    setWorkspace(next);
+  }
+
   function handleAcceptedScan(result: ScanResult) {
     const match = findProductByScannedCode(products, result.value);
     const outcome = acceptResolvedStocktakeScan(
@@ -277,6 +306,10 @@ export default function StocktakePage() {
 
   async function saveDraft() {
     if (!appUser) return;
+    if (editingId && !currentDraft) {
+      setError('Phiếu đang sửa không còn ở trạng thái nháp. Hãy tải lại và kiểm tra trạng thái phiếu.');
+      return;
+    }
     const entered = toStocktakeCountInputs(sessionRef.current.countsByProductId);
     setBusy(true);
     setError(null);
@@ -302,18 +335,25 @@ export default function StocktakePage() {
     }
   }
 
-  function loadDraft(draft: Stocktake) {
+  function loadDraft(draft: Stocktake, mode: EntryMode = 'manual') {
+    if (draft.status !== 'draft') {
+      setError('Chỉ phiếu nháp mới có thể tiếp tục chỉnh sửa hoặc quét.');
+      return;
+    }
     const countsByProductId = Object.fromEntries(
       draft.items.map((item) => [item.productId, item.actualQuantity]),
     );
     commitSession(createStocktakeScanSession(countsByProductId));
     setNote(draft.note || '');
     setEditingId(draft.id);
-    setEntryMode('manual');
+    setEntryMode(mode);
     setScanPhase('scanning');
     setScanFeedback(null);
+    setSelectedStocktakeId(null);
+    setWorkspace('new');
     setError(null);
     setSuccess(null);
+    if (mode === 'scan') void ensureAudioReady();
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
@@ -440,129 +480,180 @@ export default function StocktakePage() {
     <div className="inv-shell stk-shell">
       <header className="inv-page-header">
         <div>
-          <p className="eyebrow">STK-001 / STK-002 / STK-003</p>
+          <p className="eyebrow">STK-001 / STK-002 / STK-003 / STK-004</p>
           <h1>Kiểm kê</h1>
-          <p className="muted">Đếm thực tế bằng nhập tay hoặc quét liên tục. Chỉ khi bấm Chốt mới điều chỉnh kho.</p>
+          <p className="muted">Tạo phiếu kiểm kê mới hoặc quản lý toàn bộ phiếu lịch sử trong cùng một màn hình.</p>
         </div>
       </header>
 
-      {error && <p className="form-error">{error}</p>}
-      {success && <p className="inv-success">{success}</p>}
+      {error && <p className="form-error" role="alert">{error}</p>}
+      {success && <p className="inv-success" role="status">{success}</p>}
 
-      <section className="inv-card stk-editor">
-        <div className="inv-card__header">
-          <div>
-            <h2>{currentDraft ? `Sửa ${currentDraft.code}` : 'Tạo phiếu kiểm kê nháp'}</h2>
-            <p className="muted">
-              Không có số lượng = chưa xác nhận. Số 0 chỉ được lưu khi bạn chủ động xác nhận bằng 0.
-            </p>
+      <div className="stk-workspace-tabs" role="group" aria-label="Khu vực kiểm kê">
+        <button
+          className={`button ${workspace === 'new' ? 'button--primary' : 'button--secondary'}`}
+          type="button"
+          aria-pressed={workspace === 'new'}
+          onClick={() => selectWorkspace('new')}
+        >
+          Kiểm kê mới
+        </button>
+        <button
+          className={`button ${workspace === 'manage' ? 'button--primary' : 'button--secondary'}`}
+          type="button"
+          aria-pressed={workspace === 'manage'}
+          onClick={() => selectWorkspace('manage')}
+        >
+          Quản lý phiếu
+        </button>
+      </div>
+
+      {workspace === 'new' ? (
+        <section className="inv-card stk-editor">
+          <div className="inv-card__header">
+            <div>
+              <h2>{currentDraft ? `Sửa ${currentDraft.code}` : editingId ? 'Phiếu đang sửa đã đổi trạng thái' : 'Tạo phiếu kiểm kê nháp'}</h2>
+              <p className="muted">
+                Không có số lượng = chưa xác nhận. Số 0 chỉ được lưu khi bạn chủ động xác nhận bằng 0.
+              </p>
+            </div>
           </div>
-        </div>
 
-        <div className="stk-mode-toggle" role="group" aria-label="Chọn cách nhập số lượng kiểm kê">
-          <button
-            className={`button ${entryMode === 'manual' ? 'button--primary' : 'button--secondary'}`}
-            type="button"
-            aria-pressed={entryMode === 'manual'}
-            onClick={() => setEntryMode('manual')}
-          >
-            Nhập thủ công
-          </button>
-          <button
-            className={`button ${entryMode === 'scan' ? 'button--primary' : 'button--secondary'}`}
-            type="button"
-            aria-pressed={entryMode === 'scan'}
-            onClick={activateScanMode}
-          >
-            Quét mã liên tục
-          </button>
-        </div>
+          <div className="stk-mode-toggle" role="group" aria-label="Chọn cách nhập số lượng kiểm kê">
+            <button
+              className={`button ${entryMode === 'manual' ? 'button--primary' : 'button--secondary'}`}
+              type="button"
+              aria-pressed={entryMode === 'manual'}
+              onClick={() => setEntryMode('manual')}
+            >
+              Nhập thủ công
+            </button>
+            <button
+              className={`button ${entryMode === 'scan' ? 'button--primary' : 'button--secondary'}`}
+              type="button"
+              aria-pressed={entryMode === 'scan'}
+              onClick={activateScanMode}
+            >
+              Quét mã liên tục
+            </button>
+          </div>
 
-        {entryMode === 'manual' ? (
-          <div className="stk-manual-mode">
-            <div className="stk-manual-toolbar">
-              <div>
-                <h3>Nhập số lượng thực tế</h3>
-                <p className="muted">Có thể chuyển sang quét mã rồi quay lại đây mà không mất số đã đếm.</p>
+          {entryMode === 'manual' ? (
+            <div className="stk-manual-mode">
+              <div className="stk-manual-toolbar">
+                <div>
+                  <h3>Nhập số lượng thực tế</h3>
+                  <p className="muted">Có thể chuyển sang quét mã rồi quay lại đây mà không mất số đã đếm.</p>
+                </div>
+                <input
+                  className="inv-search"
+                  type="search"
+                  placeholder="Tìm SKU / tên..."
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                />
               </div>
-              <input
-                className="inv-search"
-                type="search"
-                placeholder="Tìm SKU / tên..."
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-              />
-            </div>
 
-            <div className="inv-table-wrap">
-              <table className="inv-table stk-manual-table">
-                <thead>
-                  <tr><th>SKU</th><th>Sản phẩm</th><th>Tồn hệ thống</th><th>Thực tế</th></tr>
-                </thead>
-                <tbody>
-                  {visibleProducts.map((product) => (
-                    <tr key={product.id}>
-                      <td>{product.sku}</td>
-                      <td>{product.name}</td>
-                      <td>{formatQuantity(draftSystemQuantity.get(product.id) ?? product.stockQuantity)}</td>
-                      <td>
-                        <input
-                          className="inv-row-input"
-                          type="number"
-                          inputMode="decimal"
-                          min="0"
-                          step="0.001"
-                          placeholder="Chưa đếm"
-                          value={
-                            hasConfirmedCount(session.countsByProductId, product.id)
-                              ? session.countsByProductId[product.id]
-                              : ''
-                          }
-                          onChange={(event) => changeManualQuantity(product.id, event.target.value)}
-                        />
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <div className="inv-table-wrap">
+                <table className="inv-table stk-manual-table">
+                  <thead>
+                    <tr><th>SKU</th><th>Sản phẩm</th><th>Tồn hệ thống</th><th>Thực tế</th></tr>
+                  </thead>
+                  <tbody>
+                    {visibleProducts.map((product) => (
+                      <tr key={product.id}>
+                        <td>{product.sku}</td>
+                        <td>{product.name}</td>
+                        <td>{formatQuantity(draftSystemQuantity.get(product.id) ?? product.stockQuantity)}</td>
+                        <td>
+                          <input
+                            className="inv-row-input"
+                            type="number"
+                            inputMode="decimal"
+                            min="0"
+                            step="0.001"
+                            placeholder="Chưa đếm"
+                            value={
+                              hasConfirmedCount(session.countsByProductId, product.id)
+                                ? session.countsByProductId[product.id]
+                                : ''
+                            }
+                            onChange={(event) => changeManualQuantity(product.id, event.target.value)}
+                          />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
-          </div>
-        ) : (
-          <div className="stk-scan-mode">
-            {scanPhase === 'scanning' ? (
-              <div className="stk-scan-grid">
-                <div className="stk-camera-panel">
-                  <div className="stk-section-heading">
-                    <div>
-                      <p className="eyebrow">Quét kiểm kê</p>
-                      <h3>Camera liên tục</h3>
+          ) : (
+            <div className="stk-scan-mode">
+              {scanPhase === 'scanning' ? (
+                <div className="stk-scan-grid">
+                  <div className="stk-camera-panel">
+                    <div className="stk-section-heading">
+                      <div>
+                        <p className="eyebrow">Quét kiểm kê</p>
+                        <h3>Camera liên tục</h3>
+                      </div>
                     </div>
+
+                    {renderCameraFeedback()}
+
+                    <BarcodeScanner onScan={handleAcceptedScan} scanPolicy="leave-to-rearm" />
+
+                    <p className="stk-scan-guidance">
+                      Chỉ khi xuất hiện thông báo xanh “Đã quét thành công” thì số lượng mới được cộng +1.
+                      Sau mỗi lượt, đưa mã ra khỏi khung rồi quét mã tiếp theo.
+                    </p>
+
+                    <button
+                      className="button button--secondary stk-end-scan"
+                      type="button"
+                      onClick={() => setScanPhase('review')}
+                    >
+                      Kết thúc quét
+                    </button>
                   </div>
 
-                  {renderCameraFeedback()}
+                  <aside className="stk-scan-side" aria-label="Tóm tắt phiên kiểm kê">
+                    <div className="stk-scan-stats">
+                      <div><span>Tổng lượt quét</span><strong>{session.acceptedScanCount}</strong></div>
+                      <div><span>Mặt hàng đã quét</span><strong>{scannedProductCount}</strong></div>
+                    </div>
 
-                  <BarcodeScanner onScan={handleAcceptedScan} scanPolicy="leave-to-rearm" />
+                    <button
+                      className="button button--secondary stk-undo"
+                      type="button"
+                      disabled={session.scanUndoStack.length === 0}
+                      onClick={undoLastScan}
+                    >
+                      Hoàn tác lượt quét cuối
+                    </button>
 
-                  <p className="stk-scan-guidance">
-                    Chỉ khi xuất hiện thông báo xanh “Đã quét thành công” thì số lượng mới được cộng +1.
-                    Sau mỗi lượt, đưa mã ra khỏi khung rồi quét mã tiếp theo.
-                  </p>
-
-                  <button
-                    className="button button--secondary stk-end-scan"
-                    type="button"
-                    onClick={() => setScanPhase('review')}
-                  >
-                    Kết thúc quét
-                  </button>
+                    <div className="stk-scan-list-preview">
+                      <h3>Danh sách đã quét / xác nhận</h3>
+                      {renderConfirmedList()}
+                    </div>
+                  </aside>
                 </div>
-
-                <aside className="stk-scan-side" aria-label="Tóm tắt phiên kiểm kê">
+              ) : (
+                <div className="stk-review">
+                  <div className="stk-review__heading">
+                    <div>
+                      <p className="eyebrow">Review</p>
+                      <h3>Đã kết thúc quét</h3>
+                      <p className="muted">Camera đã dừng. Các thay đổi hiện tại chưa được lưu. Lưu phiếu nháp để ghi lại kết quả kiểm kê.</p>
+                    </div>
+                    <button className="button button--secondary" type="button" onClick={activateScanMode}>
+                      Tiếp tục quét
+                    </button>
+                  </div>
                   <div className="stk-scan-stats">
                     <div><span>Tổng lượt quét</span><strong>{session.acceptedScanCount}</strong></div>
                     <div><span>Mặt hàng đã quét</span><strong>{scannedProductCount}</strong></div>
                   </div>
-
                   <button
                     className="button button--secondary stk-undo"
                     type="button"
@@ -571,92 +662,43 @@ export default function StocktakePage() {
                   >
                     Hoàn tác lượt quét cuối
                   </button>
+                  {renderConfirmedList()}
+                </div>
+              )}
+            </div>
+          )}
 
-                  <div className="stk-scan-list-preview">
-                    <h3>Danh sách đã quét / xác nhận</h3>
-                    {renderConfirmedList()}
-                  </div>
-                </aside>
-              </div>
-            ) : (
-              <div className="stk-review">
-                <div className="stk-review__heading">
-                  <div>
-                    <p className="eyebrow">Review</p>
-                    <h3>Đã kết thúc quét</h3>
-                    <p className="muted">Camera đã dừng. Các thay đổi hiện tại chưa được lưu. Lưu phiếu nháp để ghi lại kết quả kiểm kê.</p>
-                  </div>
-                  <button className="button button--secondary" type="button" onClick={activateScanMode}>
-                    Tiếp tục quét
-                  </button>
-                </div>
-                <div className="stk-scan-stats">
-                  <div><span>Tổng lượt quét</span><strong>{session.acceptedScanCount}</strong></div>
-                  <div><span>Mặt hàng đã quét</span><strong>{scannedProductCount}</strong></div>
-                </div>
-                <button
-                  className="button button--secondary stk-undo"
-                  type="button"
-                  disabled={session.scanUndoStack.length === 0}
-                  onClick={undoLastScan}
-                >
-                  Hoàn tác lượt quét cuối
-                </button>
-                {renderConfirmedList()}
-              </div>
+          <label className="inv-field">
+            Ghi chú
+            <textarea value={note} onChange={(event) => setNote(event.target.value)} />
+          </label>
+
+          <div className="inv-actions">
+            <button className="button button--primary" type="button" disabled={busy || !appUser || !productsReady || (Boolean(editingId) && !currentDraft)} onClick={saveDraft}>
+              {busy ? 'Đang lưu...' : currentDraft ? 'Cập nhật phiếu nháp' : 'Lưu phiếu nháp'}
+            </button>
+            {editingId && (
+              <button className="button button--secondary" type="button" disabled={busy} onClick={stopEditingDraft}>
+                Bỏ sửa
+              </button>
             )}
           </div>
-        )}
-
-        <label className="inv-field">
-          Ghi chú
-          <textarea value={note} onChange={(event) => setNote(event.target.value)} />
-        </label>
-
-        <div className="inv-actions">
-          <button className="button button--primary" type="button" disabled={busy || !appUser} onClick={saveDraft}>
-            {busy ? 'Đang lưu...' : currentDraft ? 'Cập nhật phiếu nháp' : 'Lưu phiếu nháp'}
-          </button>
-          {currentDraft && (
-            <button className="button button--secondary" type="button" disabled={busy} onClick={stopEditingDraft}>
-              Bỏ sửa
-            </button>
-          )}
-        </div>
-      </section>
-
-      <section className="inv-card">
-        <div>
-          <h2>Lịch sử kiểm kê</h2>
-          <p className="muted">Nếu tồn kho đã thay đổi sau lúc tạo nháp, hệ thống sẽ chặn chốt để tránh áp dụng chênh lệch cũ.</p>
-        </div>
-        {stocktakes.length === 0 ? (
-          <p className="muted">Chưa có phiếu kiểm kê.</p>
-        ) : (
-          <div className="inv-list">
-            {stocktakes.slice(0, 100).map((item) => (
-              <article className="inv-record" key={item.id}>
-                <div className="inv-record__meta">
-                  <strong>{item.code} · {item.items.length} sản phẩm</strong>
-                  <span>{dateTime(item.createdAt)} · Tổng chênh lệch {item.items.reduce((sum, row) => sum + row.difference, 0)}</span>
-                  <span className={`inv-badge ${item.status === 'completed' ? 'inv-badge--ok' : item.status === 'cancelled' ? 'inv-badge--cancelled' : ''}`}>
-                    {item.status === 'draft' ? 'Nháp' : item.status === 'completed' ? 'Đã chốt' : 'Đã hủy'}
-                  </span>
-                </div>
-                <div className="inv-record__actions">
-                  {item.status === 'draft' && (
-                    <>
-                      <button className="button button--secondary" type="button" disabled={busy} onClick={() => loadDraft(item)}>Sửa</button>
-                      <button className="button button--primary" type="button" disabled={busy} onClick={() => handleComplete(item)}>Chốt kiểm kê</button>
-                      <button className="button button--secondary" type="button" disabled={busy} onClick={() => handleCancel(item)}>Hủy</button>
-                    </>
-                  )}
-                </div>
-              </article>
-            ))}
-          </div>
-        )}
-      </section>
+        </section>
+      ) : (
+        <StocktakeManagement
+          stocktakes={stocktakes}
+          products={products}
+          appUser={appUser}
+          loading={!stocktakesReady}
+          busy={busy}
+          selectedStocktakeId={selectedStocktakeId}
+          onSelectStocktake={setSelectedStocktakeId}
+          onEdit={(stocktake) => loadDraft(stocktake, 'manual')}
+          onContinueScan={(stocktake) => loadDraft(stocktake, 'scan')}
+          onComplete={(stocktake) => void handleComplete(stocktake)}
+          onCancel={(stocktake) => void handleCancel(stocktake)}
+        />
+      )}
     </div>
   );
 }
