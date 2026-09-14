@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import type { Product } from '../../types/models';
+import { normalizeSearchCode } from '../../shared/search/searchNormalization';
 import { createProduct, type ProductInput } from '../products/productService';
 
 interface PurchaseQuickAddProductProps {
@@ -20,10 +21,6 @@ interface QuickProductForm {
   salePrice: string;
 }
 
-function normalizeCode(value: string) {
-  return value.trim().toLocaleLowerCase('vi');
-}
-
 export function getQuickAddProductValidationError(form: QuickProductForm, products: readonly Product[]) {
   const sku = form.sku.trim();
   const name = form.name.trim();
@@ -34,17 +31,17 @@ export function getQuickAddProductValidationError(form: QuickProductForm, produc
   if (!name) return 'Tên sản phẩm là bắt buộc.';
   if (!Number.isFinite(costPrice) || costPrice < 0) return 'Giá vốn phải là số từ 0 trở lên.';
   if (!Number.isFinite(salePrice) || salePrice < 0) return 'Giá bán phải là số từ 0 trở lên.';
-  if (products.some((product) => normalizeCode(product.sku) === normalizeCode(sku))) {
+  if (products.some((product) => normalizeSearchCode(product.sku) === normalizeSearchCode(sku))) {
     return `SKU “${sku}” đã được sử dụng.`;
   }
 
   const barcode = form.barcode.trim();
-  if (barcode && products.some((product) => product.barcode?.trim() === barcode)) {
+  if (barcode && products.some((product) => normalizeSearchCode(product.barcode) === normalizeSearchCode(barcode))) {
     return `Barcode “${barcode}” đã được sử dụng.`;
   }
 
   const qrCode = form.qrCode.trim();
-  if (qrCode && products.some((product) => product.qrCode?.trim() === qrCode)) {
+  if (qrCode && products.some((product) => normalizeSearchCode(product.qrCode) === normalizeSearchCode(qrCode))) {
     return `Mã QR “${qrCode}” đã được sử dụng.`;
   }
 
