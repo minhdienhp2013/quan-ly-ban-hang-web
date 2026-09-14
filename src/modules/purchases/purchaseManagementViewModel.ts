@@ -1,6 +1,13 @@
 import type { AppUser, Purchase, PurchaseItem, Supplier } from '../../types/models';
 
 export type PurchaseStatusFilter = 'all' | Purchase['status'];
+export type PurchaseSourceLoadState = 'pending' | 'ready' | 'error';
+
+export interface PurchaseDataLoadState {
+  purchases: PurchaseSourceLoadState;
+  products: PurchaseSourceLoadState;
+  suppliers: PurchaseSourceLoadState;
+}
 
 export interface PurchaseFilterState {
   query: string;
@@ -49,6 +56,10 @@ function normalize(value: string) {
 
 function getItems(purchase: Pick<Purchase, 'items'>): PurchaseItem[] {
   return Array.isArray(purchase.items) ? purchase.items : [];
+}
+
+export function isPurchaseDataLoading(state: PurchaseDataLoadState) {
+  return state.purchases === 'pending' || state.products === 'pending' || state.suppliers === 'pending';
 }
 
 export function getPurchaseStatusLabel(status: Purchase['status']) {
