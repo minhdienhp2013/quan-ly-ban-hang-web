@@ -3,18 +3,25 @@ import fs from 'node:fs';
 import test from 'node:test';
 import { normalizeSearchCode, normalizeSearchText } from '../src/shared/search/searchNormalization.ts';
 
+const sharedProductSearchSourcePath = 'src/shared/search/productSearch.ts';
+const sharedProductSearchHarnessPath = 'src/shared/search/.productSearch.purchase-test.ts';
 const productSearchSourcePath = 'src/modules/purchases/purchaseProductSearch.ts';
 const productSearchHarnessPath = 'src/modules/purchases/.purchaseProductSearch.node-test.ts';
 let productSearchModule;
 try {
+  const sharedProductSearchSource = fs.readFileSync(sharedProductSearchSourcePath, 'utf8')
+    .replaceAll("from './searchNormalization';", "from './searchNormalization.ts';");
+  fs.writeFileSync(sharedProductSearchHarnessPath, sharedProductSearchSource);
+
   const productSearchSource = fs.readFileSync(productSearchSourcePath, 'utf8').replace(
-    "from '../../shared/search/searchNormalization';",
-    "from '../../shared/search/searchNormalization.ts';",
+    "from '../../shared/search/productSearch';",
+    "from '../../shared/search/.productSearch.purchase-test.ts';",
   );
   fs.writeFileSync(productSearchHarnessPath, productSearchSource);
   productSearchModule = await import(`../${productSearchHarnessPath}?test=${Date.now()}`);
 } finally {
   if (fs.existsSync(productSearchHarnessPath)) fs.unlinkSync(productSearchHarnessPath);
+  if (fs.existsSync(sharedProductSearchHarnessPath)) fs.unlinkSync(sharedProductSearchHarnessPath);
 }
 const { searchPurchaseProducts } = productSearchModule;
 
