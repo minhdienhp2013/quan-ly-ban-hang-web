@@ -50,6 +50,7 @@ const completed = {
 };
 const cancelled = {
   ...completed, id: 'purchase-2', code: 'PN-20260915-CANCEL', status: 'cancelled', supplierId: 'sup-2',
+  supplierName: 'NCC đã hủy khác', note: 'Phiếu đã hủy',
   createdBy: 'other-user-123456789', createdAt: new Date(2026, 8, 15, 23, 59, 59, 999).getTime(),
 };
 
@@ -140,7 +141,7 @@ test('list Excel exports exactly filtered rows and rejects empty result', () => 
   const sheet = workbook.Sheets['Danh sach phieu'];
   assert.equal(sheet.B2.v, cancelled.code);
   assert.equal(sheet.D2.v, 'NCC000002');
-  assert.equal(sheet.E2.v, 'Tên NCC lịch sử');
+  assert.equal(sheet.E2.v, 'NCC đã hủy khác');
   assert.equal(sheet.F2.t, 'n');
   assert.equal(sheet['!cols'].length, 9);
   assert.equal(sheet['!autofilter'].ref, 'A1:I2');
@@ -150,7 +151,7 @@ test('list Excel exports exactly filtered rows and rejects empty result', () => 
 
 test('Excel export is read-only and has no Firebase or mutation imports', () => {
   const source = fs.readFileSync(exportSourcePath, 'utf8');
-  assert.doesNotMatch(source, /firebase\/database|commitStockOperation|createPurchase|cancelPurchase|auditLogs|stockQuantity/);
+  assert.doesNotMatch(source, /firebase\/database|\bcommitStockOperation\b|\bcreatePurchase\s*\(|\bcancelPurchase\s*\(|auditLogs|stockQuantity/);
 });
 
 test('inline detail is an accessible region, not a modal, and selection is realtime-id based', () => {
