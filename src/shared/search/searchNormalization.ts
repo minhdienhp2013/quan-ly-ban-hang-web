@@ -11,7 +11,7 @@ export interface SearchForms {
 const NAME_SEPARATOR_PATTERN = /[\s\-_.\/\\]+/g;
 const COMBINING_MARKS_PATTERN = /[\u0300-\u036f]/g;
 const NUMBER_C_PATTERN = /^(\d+)c$/;
-const NUMBER_C_COMPACT_PATTERN = /(\d+)c(?!anh)(?=[a-z]|$)/g;
+const EMBEDDED_NUMBER_C_PATTERN = /([a-z])(\d+)c(?!anh)(?=[a-z]|$)/g;
 
 function removeVietnameseDiacritics(value: string) {
   return value
@@ -53,6 +53,13 @@ function expandToken(token: string, aliases: Map<string, string>) {
   return token;
 }
 
+function expandEmbeddedNumberC(token: string) {
+  // Exact Nc is expanded by expandToken(). For compact input such as tu3cnhua,
+  // only expand an Nc segment that is embedded after letters in the same token.
+  // Tokens that start with a number (3cm, 3cpu, 3camera, 3cc...) stay literal.
+  return token.replace(EMBEDDED_NUMBER_C_PATTERN, '$1$2canh');
+}
+
 export function normalizeSearchText(value: string, aliases?: SearchAliases): SearchForms {
   const normalized = normalizeNameSeparators(normalizeBase(value));
   const compact = normalized.replace(/\s+/g, '');
@@ -64,16 +71,15 @@ export function normalizeSearchText(value: string, aliases?: SearchAliases): Sea
     .join(' ')
     .replace(/\s+/g, ' ')
     .trim();
-
-  let expandedCompact = expanded.replace(/\s+/g, '');
-  expandedCompact = expandedCompact.replace(NUMBER_C_COMPACT_PATTERN, '$1canh');
+  const tokens = expanded.split(' ').filter(Boolean);
+  const expandedCompact = tokens.map(expandEmbeddedNumberC).join('');
 
   return {
     normalized,
     compact,
     expanded,
     expandedCompact,
-    tokens: expanded.split(' ').filter(Boolean),
+    tokens,
   };
 }
 
