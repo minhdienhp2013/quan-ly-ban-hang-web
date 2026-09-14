@@ -1,12 +1,12 @@
 import type { Product } from '../../types/models';
+import {
+  matchesPreparedSearchFields,
+  prepareSharedSearchQuery,
+} from '../../shared/search/searchMatching';
 
 export type GoodsActiveFilter = 'all' | 'active' | 'inactive';
 export type GoodsStockFilter = 'all' | 'in-stock' | 'low' | 'out';
 export type GoodsStockStatus = 'inactive' | 'out' | 'low' | 'in-stock';
-
-export function normalizeGoodsSearch(value: string) {
-  return value.trim().toLocaleLowerCase('vi');
-}
 
 export function getGoodsStockStatus(product: Product): GoodsStockStatus {
   if (!product.active) return 'inactive';
@@ -35,7 +35,7 @@ export function filterGoodsProducts(
   activeFilter: GoodsActiveFilter,
   stockFilter: GoodsStockFilter,
 ) {
-  const needle = normalizeGoodsSearch(query);
+  const preparedQuery = prepareSharedSearchQuery(query);
 
   return products.filter((product) => {
     if (activeFilter === 'active' && !product.active) return false;
@@ -44,9 +44,10 @@ export function filterGoodsProducts(
     const stockStatus = getGoodsStockStatus(product);
     if (stockFilter !== 'all' && stockStatus !== stockFilter) return false;
 
-    if (!needle) return true;
-    return [product.name, product.sku, product.barcode ?? '', product.qrCode ?? '']
-      .some((value) => normalizeGoodsSearch(value).includes(needle));
+    return matchesPreparedSearchFields({
+      text: [product.name],
+      codes: [product.sku, product.barcode, product.qrCode],
+    }, preparedQuery);
   });
 }
 
