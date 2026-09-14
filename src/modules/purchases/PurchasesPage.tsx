@@ -22,6 +22,7 @@ import {
 } from './purchaseManagementViewModel';
 import { cancelPurchase, createPurchase, subscribePurchases, type CreatePurchaseInput } from './purchaseService';
 import './purchases.css';
+import './purchaseProductSearch.css';
 
 type EditorSession = { key: number; source: Purchase | null } | null;
 
@@ -44,6 +45,7 @@ export default function PurchasesPage() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [selectedPurchaseId, setSelectedPurchaseId] = useState<string | null>(null);
+  const [pendingOpenPurchaseId, setPendingOpenPurchaseId] = useState<string | null>(null);
   const [editorSession, setEditorSession] = useState<EditorSession>(null);
   const [creating, setCreating] = useState(false);
   const [busyPurchaseId, setBusyPurchaseId] = useState<string | null>(null);
@@ -132,6 +134,13 @@ export default function PurchasesPage() {
   useEffect(() => { setPage(1); }, [query, status, supplierId, fromDate, toDate, onlyMine]);
   useEffect(() => { if (pagination.page !== page) setPage(pagination.page); }, [pagination.page, page]);
   useEffect(() => {
+    if (!pendingOpenPurchaseId) return;
+    if (!filteredPurchases.some((purchase) => purchase.id === pendingOpenPurchaseId)) return;
+    setSelectedPurchaseId(pendingOpenPurchaseId);
+    setPendingOpenPurchaseId(null);
+    requestAnimationFrame(() => document.getElementById(`purchase-detail-${pendingOpenPurchaseId}`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }));
+  }, [filteredPurchases, pendingOpenPurchaseId]);
+  useEffect(() => {
     if (selectedPurchaseId && !filteredPurchases.some((purchase) => purchase.id === selectedPurchaseId)) setSelectedPurchaseId(null);
   }, [filteredPurchases, selectedPurchaseId]);
   useEffect(() => {
@@ -158,7 +167,7 @@ export default function PurchasesPage() {
   function closeDetail() { setSelectedPurchaseId(null); }
 
   function openCreate(source: Purchase | null = null) {
-    setError(null); setNotice(null); setSelectedPurchaseId(null);
+    setError(null); setNotice(null); setSelectedPurchaseId(null); setPendingOpenPurchaseId(null);
     setEditorSession({ key: Date.now(), source });
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
@@ -169,7 +178,16 @@ export default function PurchasesPage() {
     try {
       const purchase = await createPurchase(input, appUser.uid);
       setEditorSession(null);
-      setNotice(`Đã tạo ${purchase.code}, tăng tồn và ghi lịch sử kho an toàn.`);
+      setQuery('');
+      setStatus('all');
+      setSupplierId('');
+      setFromDate('');
+      setToDate('');
+      setOnlyMine(false);
+      setPage(1);
+      setSelectedPurchaseId(null);
+      setPendingOpenPurchaseId(purchase.id);
+      setNotice(`Đã tạo ${purchase.code}. Chi tiết phiếu mới sẽ tự mở để bạn có thể in tem mã / QR ngay.`);
     } finally {
       setCreating(false);
     }
