@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import type { Product, Purchase, Supplier } from '../../types/models';
 import BarcodeScanner from '../qr/BarcodeScanner';
 import { findProductByScannedCode } from '../qr/productLookup';
-import '../qr/qr.css';
+import '../qr/qrPrinting.css';
 import PurchaseProductPicker from './PurchaseProductPicker';
 import PurchaseQuickAddProduct from './PurchaseQuickAddProduct';
 import type { CreatePurchaseInput } from './purchaseService';
@@ -229,7 +229,7 @@ export default function PurchaseEditor({
             const unavailable = Boolean(line.productId && !activeProduct);
             return (
               <div className={`purchase-editor-line${unavailable ? ' is-unavailable' : ''}`} key={line.key}>
-                <label className="purchase-editor-product-field"><span className="purchase-mobile-label">Sản phẩm</span>
+                <div className="purchase-editor-product-field"><span className="purchase-mobile-label">Sản phẩm</span>
                   <PurchaseProductPicker
                     lineKey={line.key}
                     products={availableProducts}
@@ -242,7 +242,7 @@ export default function PurchaseEditor({
                     onScanRequest={openScanner}
                     onQuickAddRequest={openQuickAdd}
                   />
-                </label>
+                </div>
                 <label><span className="purchase-mobile-label">Số lượng</span><input ref={(node) => { if (node) quantityInputRefs.current.set(line.key, node); else quantityInputRefs.current.delete(line.key); }} type="number" inputMode="decimal" min="0.001" step="0.001" value={line.quantity} onChange={(event) => patchLine(line.key, { quantity: Number(event.target.value) })} /></label>
                 <label><span className="purchase-mobile-label">Giá nhập</span><input type="number" inputMode="numeric" min="0" step="1" value={line.unitCost} onChange={(event) => patchLine(line.key, { unitCost: Number(event.target.value) })} /></label>
                 <strong className="purchase-editor-line-total">{money(line.quantity * line.unitCost)} đ</strong>
