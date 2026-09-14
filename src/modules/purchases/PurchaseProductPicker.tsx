@@ -1,4 +1,12 @@
-import { useEffect, useId, useMemo, useState, type KeyboardEvent } from 'react';
+import {
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  type FocusEvent,
+  type KeyboardEvent,
+} from 'react';
 import type { Product } from '../../types/models';
 import { findProductByScannedCode } from '../qr/productLookup';
 import { searchPurchaseProducts } from './purchaseProductSearch';
@@ -33,6 +41,7 @@ export default function PurchaseProductPicker({
   onQuickAddRequest,
 }: PurchaseProductPickerProps) {
   const listId = useId();
+  const pickerRef = useRef<HTMLDivElement>(null);
   const selectedProduct = products.find((product) => product.id === productId && product.active);
   const historicalLabel = historicalSku || historicalName
     ? `${historicalSku || productId} - ${historicalName || 'Sản phẩm cũ'}`
@@ -55,10 +64,28 @@ export default function PurchaseProductPicker({
     setActiveIndex((current) => Math.min(current, Math.max(0, results.length - 1)));
   }, [results.length]);
 
-  function choose(product: Product) {
-    setQuery(productLabel(product));
+  useEffect(() => {
+    if (!open) return undefined;
+
+    function handleOutsidePointer(event: PointerEvent) {
+      const target = event.target;
+      if (target instanceof Node && pickerRef.current?.contains(target)) return;
+      setOpen(false);
+      setError('');
+    }
+
+    document.addEventListener('pointerdown', handleOutsidePointer);
+    return () => document.removeEventListener('pointerdown', handleOutsidePointer);
+  }, [open]);
+
+  function closeResults() {
     setOpen(false);
     setError('');
+  }
+
+  function choose(product: Product) {
+    setQuery(productLabel(product));
+    closeResults();
     onSelect(product);
   }
 
@@ -70,16 +97,35 @@ export default function PurchaseProductPicker({
     if (productId) onClearSelection();
   }
 
+  function handlePickerBlur(event: FocusEvent<HTMLDivElement>) {
+    const nextTarget = event.relatedTarget;
+    if (nextTarget instanceof Node && event.currentTarget.contains(nextTarget)) return;
+    closeResults();
+  }
+
+  function handleScanRequest() {
+    closeResults();
+    onScanRequest(lineKey);
+  }
+
+  function handleQuickAddRequest() {
+    closeResults();
+    onQuickAddRequest(lineKey, query);
+  }
+
   function handleKeyDown(event: KeyboardEvent<HTMLInputElement>) {
     if (event.key === 'Escape') {
-      setOpen(false);
-      setError('');
+      closeResults();
       return;
     }
 
     if (event.key === 'ArrowDown') {
       event.preventDefault();
-      if (!open) setOpen(true);
+      if (!open) {
+        setOpen(true);
+        setActiveIndex(0);
+        return;
+      }
       if (results.length > 0) setActiveIndex((current) => Math.min(results.length - 1, current + 1));
       return;
     }
@@ -115,7 +161,7 @@ export default function PurchaseProductPicker({
   }
 
   return (
-    <div className="purchase-product-picker">
+    <div ref={pickerRef} className="purchase-product-picker" onBlur={handlePickerBlur}>
       <div className="purchase-product-picker-row">
         <div className="purchase-product-search-box">
           <input
@@ -171,7 +217,7 @@ export default function PurchaseProductPicker({
           aria-label="Quét QR hoặc mã vạch"
           title="Quét QR hoặc mã vạch"
           disabled={disabled}
-          onClick={() => onScanRequest(lineKey)}
+          onClick={handleScanRequest}
         >
           ▣
         </button>
@@ -181,7 +227,7 @@ export default function PurchaseProductPicker({
           aria-label="Thêm nhanh hàng hóa mới"
           title="Thêm nhanh hàng hóa mới"
           disabled={disabled}
-          onClick={() => onQuickAddRequest(lineKey, query)}
+          onClick={handleQuickAddRequest}
         >
           +
         </button>
