@@ -67,7 +67,39 @@ test('Nc built-in expansion is general and supports compact queries', () => {
     assert.equal(forms.expanded, `${number} canh`);
     assert.equal(forms.expandedCompact, `${number}canh`);
   }
+  assert.equal(normalizeSearchText('tu3cnhua').expandedCompact, 'tu3canhnhua');
   assert.equal(normalizeSearchText('tu10cnhua').expandedCompact, 'tu10canhnhua');
+});
+
+test('Nc boundary does not reinterpret dimensions or ordinary c-prefixed number tokens', () => {
+  assert.equal(normalizeSearchText('3c').expanded, '3 canh');
+  assert.equal(normalizeSearchText('10c').expanded, '10 canh');
+  assert.equal(normalizeSearchText('3canh').expandedCompact, '3canh');
+
+  for (const literal of ['3cm', '10cm', '25cm', '3cc', '3cpu', '3camera']) {
+    const forms = normalizeSearchText(literal);
+    assert.equal(forms.expanded, literal, `${literal} must stay literal`);
+    assert.equal(forms.expandedCompact, literal, `${literal} compact form must stay literal`);
+  }
+
+  const dimensionProduct = product({
+    id: 'dimension',
+    sku: 'THANH-3CM',
+    name: 'Thanh nhựa 3cm',
+    barcode: undefined,
+    qrCode: undefined,
+  });
+  assert.equal(searchPurchaseProducts([dimensionProduct], '3c').length, 0);
+
+  const cabinet = product({
+    id: 'cabinet',
+    sku: 'TU-3-CANH',
+    name: 'Tủ 3 cánh nhựa',
+    barcode: undefined,
+    qrCode: undefined,
+  });
+  assert.equal(searchPurchaseProducts([cabinet], 'tu3cnhua')[0]?.product.id, cabinet.id);
+  assert.equal(searchPurchaseProducts([cabinet], 'tu3cmnhua').length, 0);
 });
 
 test('future aliases are injected from outside and coexist with built-in Nc', () => {
@@ -77,6 +109,9 @@ test('future aliases are injected from outside and coexist with built-in Nc', ()
 
 test('code normalization preserves separators while remaining case-insensitive', () => {
   assert.equal(normalizeSearchCode(' QR-Ab_12/3 '), 'qr-ab_12/3');
+  assert.equal(normalizeSearchCode('ABC123'), normalizeSearchCode('abc123'));
+  assert.equal(normalizeSearchCode('QR-001'), normalizeSearchCode('qr-001'));
+  assert.notEqual(normalizeSearchCode('QR-001'), normalizeSearchCode('QR001'));
 });
 
 test('ranking keeps exact QR then barcode then SKU ahead of exact/fuzzy names', () => {
@@ -129,6 +164,17 @@ test('camera scan reuses BarcodeScanner and exact QR product lookup without a ne
   assert.doesNotMatch(editor, /scannerService|startCameraScanner/);
 });
 
+test('quick add duplicate checks share exact code normalization for SKU barcode and QR', () => {
+  const quickAdd = fs.readFileSync('src/modules/purchases/PurchaseQuickAddProduct.tsx', 'utf8');
+  assert.match(quickAdd, /import \{ normalizeSearchCode \} from '\.\.\/\.\.\/shared\/search\/searchNormalization'/);
+  assert.match(quickAdd, /normalizeSearchCode\(product\.sku\) === normalizeSearchCode\(sku\)/);
+  assert.match(quickAdd, /normalizeSearchCode\(product\.barcode\) === normalizeSearchCode\(barcode\)/);
+  assert.match(quickAdd, /normalizeSearchCode\(product\.qrCode\) === normalizeSearchCode\(qrCode\)/);
+  assert.equal(normalizeSearchCode('ABC123'), normalizeSearchCode('abc123'));
+  assert.equal(normalizeSearchCode('QR-001'), normalizeSearchCode('qr-001'));
+  assert.notEqual(normalizeSearchCode('QR-001'), normalizeSearchCode('QR001'));
+});
+
 test('quick add reuses Product create contract and auto-selects returned Product on the same line', () => {
   const quickAdd = fs.readFileSync('src/modules/purchases/PurchaseQuickAddProduct.tsx', 'utf8');
   const editor = fs.readFileSync('src/modules/purchases/PurchaseEditor.tsx', 'utf8');
@@ -141,12 +187,44 @@ test('quick add reuses Product create contract and auto-selects returned Product
   assert.match(editor, /unitCost: product\.costPrice/);
 });
 
+test('product picker closes results on outside pointer, focus exit, selection, escape, scan and quick add', () => {
+  const picker = fs.readFileSync('src/modules/purchases/PurchaseProductPicker.tsx', 'utf8');
+  assert.match(picker, /document\.addEventListener\('pointerdown', handleOutsidePointer\)/);
+  assert.match(picker, /document\.removeEventListener\('pointerdown', handleOutsidePointer\)/);
+  assert.match(picker, /onBlur=\{handlePickerBlur\}/);
+  assert.match(picker, /event\.currentTarget\.contains\(nextTarget\)/);
+  assert.match(picker, /function choose\(product: Product\) \{[\s\S]*?closeResults\(\);[\s\S]*?onSelect\(product\)/);
+  assert.match(picker, /event\.key === 'Escape'[\s\S]*?closeResults\(\)/);
+  assert.match(picker, /function handleScanRequest\(\) \{\s*closeResults\(\);\s*onScanRequest\(lineKey\)/);
+  assert.match(picker, /function handleQuickAddRequest\(\) \{\s*closeResults\(\);\s*onQuickAddRequest\(lineKey, query\)/);
+  assert.match(picker, /onClick=\{handleScanRequest\}/);
+  assert.match(picker, /onClick=\{handleQuickAddRequest\}/);
+});
+
+test('ArrowDown opens a closed result list on the first result instead of skipping to the second', () => {
+  const picker = fs.readFileSync('src/modules/purchases/PurchaseProductPicker.tsx', 'utf8');
+  assert.match(picker, /if \(!open\) \{\s*setOpen\(true\);\s*setActiveIndex\(0\);\s*return;\s*\}/);
+});
+
 test('multiple Purchase lines use stable independent keys and cleanup scan/quick-add state on delete', () => {
   const editor = fs.readFileSync('src/modules/purchases/PurchaseEditor.tsx', 'utf8');
   assert.match(editor, /key: nextLineKey\(\)/);
   assert.match(editor, /scanTargetLineKey === lineKey/);
   assert.match(editor, /quickAddTarget\?\.lineKey === lineKey/);
   assert.match(editor, /quantityInputRefs\.current\.delete\(lineKey\)/);
+});
+
+test('scanner and quick-add panels render beside the originating line and stay target-safe', () => {
+  const editor = fs.readFileSync('src/modules/purchases/PurchaseEditor.tsx', 'utf8');
+  assert.match(editor, /<Fragment key=\{line\.key\}>/);
+  assert.match(editor, /scanTargetLineKey === line\.key \? \(/);
+  assert.match(editor, /quickAddTarget\?\.lineKey === line\.key \? \(/);
+  assert.match(editor, /className="purchase-editor-context-panel" ref=\{contextPanelRef\}/);
+  assert.match(editor, /scrollIntoView\(\{ block: 'nearest', behavior: 'smooth' \}\)/);
+  assert.match(editor, /const targetLineKey = scanTargetLineKey;[\s\S]*?selectProduct\(targetLineKey, match\.product\)/);
+  assert.match(editor, /const targetLineKey = quickAddTarget\.lineKey;[\s\S]*?selectProduct\(targetLineKey, product\)/);
+  assert.match(editor, /if \(scanTargetLineKey === lineKey\)[\s\S]*?setScanTargetLineKey\(null\)/);
+  assert.match(editor, /if \(quickAddTarget\?\.lineKey === lineKey\) setQuickAddTarget\(null\)/);
 });
 
 test('after create the new Purchase is selected and completed detail exposes existing print handoff', () => {
@@ -161,11 +239,12 @@ test('after create the new Purchase is selected and completed detail exposes exi
   assert.match(viewModel, /print: completed/);
 });
 
-test('responsive smart product row keeps search flexible and scan/plus at 44px', () => {
+test('responsive smart product row keeps search flexible, contextual panels visible and scan/plus at 44px', () => {
   const css = fs.readFileSync('src/modules/purchases/purchaseSmartProductSearch.css', 'utf8');
   assert.match(css, /grid-template-columns:minmax\(0,1fr\) 44px 44px/);
   assert.match(css, /\.purchase-product-icon-button\{[^}]*width:44px[^}]*height:44px/);
   assert.match(css, /\.purchase-product-results\{[^}]*max-width:100%/);
+  assert.match(css, /\.purchase-editor-context-panel\{[^}]*min-width:0[^}]*scroll-margin-block:12px/);
   assert.match(css, /@media\(max-width:430px\)/);
   assert.match(css, /@media\(max-width:1100px\)\{\.purchase-editor-product-field\{grid-column:1\/-1\}/);
 });
