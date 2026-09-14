@@ -34,11 +34,10 @@ export default function PurchaseProductPicker({
 }: PurchaseProductPickerProps) {
   const listId = useId();
   const selectedProduct = products.find((product) => product.id === productId && product.active);
-  const initialLabel = selectedProduct
-    ? productLabel(selectedProduct)
-    : historicalSku || historicalName
-      ? `${historicalSku || productId} - ${historicalName || 'Sản phẩm cũ'}`
-      : '';
+  const historicalLabel = historicalSku || historicalName
+    ? `${historicalSku || productId} - ${historicalName || 'Sản phẩm cũ'}`
+    : '';
+  const initialLabel = historicalLabel || (selectedProduct ? productLabel(selectedProduct) : '');
   const [query, setQuery] = useState(initialLabel);
   const [open, setOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
@@ -47,9 +46,10 @@ export default function PurchaseProductPicker({
   const results = useMemo(() => searchPurchaseProducts(products, query, undefined, 10), [products, query]);
 
   useEffect(() => {
+    if (historicalSku || historicalName) return;
     const current = products.find((product) => product.id === productId && product.active);
     if (current) setQuery(productLabel(current));
-  }, [productId, products]);
+  }, [historicalName, historicalSku, productId, products]);
 
   useEffect(() => {
     setActiveIndex((current) => Math.min(current, Math.max(0, results.length - 1)));
@@ -80,14 +80,14 @@ export default function PurchaseProductPicker({
     if (event.key === 'ArrowDown') {
       event.preventDefault();
       if (!open) setOpen(true);
-      setActiveIndex((current) => Math.min(results.length - 1, current + 1));
+      if (results.length > 0) setActiveIndex((current) => Math.min(results.length - 1, current + 1));
       return;
     }
 
     if (event.key === 'ArrowUp') {
       event.preventDefault();
       if (!open) setOpen(true);
-      setActiveIndex((current) => Math.max(0, current - 1));
+      if (results.length > 0) setActiveIndex((current) => Math.max(0, current - 1));
       return;
     }
 
