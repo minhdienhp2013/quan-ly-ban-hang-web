@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import type { AppUser, Product, Stocktake } from '../../types/models';
 import {
   buildStocktakeDetailRows,
@@ -19,6 +20,23 @@ interface StocktakeDetailProps {
   onExport: (stocktake: Stocktake) => void;
   onComplete: (stocktake: Stocktake) => void;
   onCancel: (stocktake: Stocktake) => void;
+}
+
+const FOCUSABLE_SELECTOR = [
+  'button:not([disabled])',
+  '[href]',
+  'input:not([disabled])',
+  'select:not([disabled])',
+  'textarea:not([disabled])',
+  '[tabindex]:not([tabindex="-1"])',
+].join(',');
+
+function getFocusableElements(container: HTMLElement) {
+  return Array.from(container.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)).filter((element) =>
+    !element.hasAttribute('hidden') &&
+    element.getAttribute('aria-hidden') !== 'true' &&
+    element.getClientRects().length > 0,
+  );
 }
 
 function formatQuantity(value: number) {
@@ -47,18 +65,85 @@ export default function StocktakeDetail({
   onComplete,
   onCancel,
 }: StocktakeDetailProps) {
+  const dialogRef = useRef<HTMLElement | null>(null);
+  const closeButtonRef = useRef<HTMLButtonElement | null>(null);
+  const onCloseRef = useRef(onClose);
   const rows = buildStocktakeDetailRows(stocktake, products);
   const totals = getStocktakeTotals(stocktake);
   const actions = getStocktakeActionCapabilities(stocktake.status);
   const creator = resolveCreatorDisplay(stocktake.createdBy, appUser);
 
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
+
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    const closeButton = closeButtonRef.current;
+
+    if (closeButton && !closeButton.disabled) {
+      closeButton.focus();
+    }
+    if (dialog && !dialog.contains(document.activeElement)) {
+      dialog.focus();
+    }
+
+    function handleDialogKeyDown(event: KeyboardEvent) {
+      const currentDialog = dialogRef.current;
+      if (!currentDialog) return;
+
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        event.stopPropagation();
+        onCloseRef.current();
+        return;
+      }
+
+      if (event.key !== 'Tab') return;
+
+      const focusable = getFocusableElements(currentDialog);
+      if (focusable.length === 0) {
+        event.preventDefault();
+        currentDialog.focus();
+        return;
+      }
+
+      const activeElement = document.activeElement;
+      const activeIndex = focusable.findIndex((element) => element === activeElement);
+      const firstFocusable = focusable[0];
+      const lastFocusable = focusable[focusable.length - 1];
+
+      if (activeIndex === -1) {
+        event.preventDefault();
+        (event.shiftKey ? lastFocusable : firstFocusable).focus();
+        return;
+      }
+
+      if (event.shiftKey && activeIndex === 0) {
+        event.preventDefault();
+        lastFocusable.focus();
+        return;
+      }
+
+      if (!event.shiftKey && activeIndex === focusable.length - 1) {
+        event.preventDefault();
+        firstFocusable.focus();
+      }
+    }
+
+    document.addEventListener('keydown', handleDialogKeyDown);
+    return () => document.removeEventListener('keydown', handleDialogKeyDown);
+  }, []);
+
   return (
     <div className="stk-management-modal-backdrop" role="presentation">
       <section
+        ref={dialogRef}
         className="stk-management-modal"
         role="dialog"
         aria-modal="true"
         aria-labelledby="stk-detail-title"
+        tabIndex={-1}
       >
         <header className="stk-detail-header">
           <div>
@@ -68,7 +153,12 @@ export default function StocktakeDetail({
               {getStocktakeStatusLabel(stocktake.status)}
             </span>
           </div>
-          <button className="button button--secondary stk-management-touch" type="button" onClick={onClose}>
+          <button
+            ref={closeButtonRef}
+            className="button button--secondary stk-management-touch"
+            type="button"
+            onClick={onClose}
+          >
             Đóng
           </button>
         </header>

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { AppUser, Product, Stocktake } from '../../types/models';
 import {
   exportStocktakeListToExcel,
@@ -61,6 +61,8 @@ export default function StocktakeManagement({
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
   const [notice, setNotice] = useState<string | null>(null);
+  const detailOpenerRef = useRef<HTMLElement | null>(null);
+  const detailWasOpenRef = useRef(false);
 
   const fromBoundary = getLocalDayBoundary(fromDate, 'start');
   const toBoundary = getLocalDayBoundary(toDate, 'end');
@@ -77,6 +79,29 @@ export default function StocktakeManagement({
       : null,
     [selectedStocktakeId, stocktakes],
   );
+
+  useEffect(() => {
+    if (selectedStocktake) {
+      detailWasOpenRef.current = true;
+      return;
+    }
+    if (!detailWasOpenRef.current) return;
+
+    detailWasOpenRef.current = false;
+    const opener = detailOpenerRef.current;
+    detailOpenerRef.current = null;
+    if (opener?.isConnected) opener.focus();
+  }, [selectedStocktake]);
+
+  function openDetail(stocktakeId: string) {
+    const activeElement = document.activeElement;
+    detailOpenerRef.current = activeElement instanceof HTMLElement ? activeElement : null;
+    onSelectStocktake(stocktakeId);
+  }
+
+  function closeDetail() {
+    onSelectStocktake(null);
+  }
 
   function clearFilters() {
     setQuery('');
@@ -203,7 +228,7 @@ export default function StocktakeManagement({
                   return (
                     <tr key={stocktake.id}>
                       <td>{index + 1}</td>
-                      <td><button className="stk-document-code" type="button" onClick={() => onSelectStocktake(stocktake.id)}>{stocktake.code}</button></td>
+                      <td><button className="stk-document-code" type="button" onClick={() => openDetail(stocktake.id)}>{stocktake.code}</button></td>
                       <td>{dateTime(stocktake.createdAt)}</td>
                       <td><span className={`stk-status stk-status--${stocktake.status}`}>{getStocktakeStatusLabel(stocktake.status)}</span></td>
                       <td className="stk-number">{totals.itemCount}</td>
@@ -214,7 +239,7 @@ export default function StocktakeManagement({
                       <td className="stk-management-note-cell">{stocktake.note || '—'}</td>
                       <td>
                         <div className="stk-management-row-actions">
-                          <button type="button" onClick={() => onSelectStocktake(stocktake.id)}>Xem</button>
+                          <button type="button" onClick={() => openDetail(stocktake.id)}>Xem</button>
                           {actions.edit ? <button type="button" disabled={busy} onClick={() => onEdit(stocktake)}>Sửa</button> : null}
                           {actions.continueScan ? <button type="button" disabled={busy} onClick={() => onContinueScan(stocktake)}>Tiếp tục quét</button> : null}
                           <button type="button" disabled={busy} onClick={() => handleExport(stocktake)}>Xuất Excel</button>
@@ -236,7 +261,7 @@ export default function StocktakeManagement({
               return (
                 <article className="stk-management-card" key={`${stocktake.id}-card`}>
                   <div className="stk-management-card__heading">
-                    <button className="stk-document-code" type="button" onClick={() => onSelectStocktake(stocktake.id)}>{stocktake.code}</button>
+                    <button className="stk-document-code" type="button" onClick={() => openDetail(stocktake.id)}>{stocktake.code}</button>
                     <span className={`stk-status stk-status--${stocktake.status}`}>{getStocktakeStatusLabel(stocktake.status)}</span>
                   </div>
                   <div className="stk-management-card__meta">
@@ -246,7 +271,7 @@ export default function StocktakeManagement({
                   </div>
                   {stocktake.note ? <p>{stocktake.note}</p> : null}
                   <div className="stk-management-card__actions">
-                    <button className="button button--secondary stk-management-touch" type="button" onClick={() => onSelectStocktake(stocktake.id)}>Xem</button>
+                    <button className="button button--secondary stk-management-touch" type="button" onClick={() => openDetail(stocktake.id)}>Xem</button>
                     {actions.edit ? <button className="button button--secondary stk-management-touch" type="button" disabled={busy} onClick={() => onEdit(stocktake)}>Sửa</button> : null}
                     {actions.continueScan ? <button className="button button--secondary stk-management-touch" type="button" disabled={busy} onClick={() => onContinueScan(stocktake)}>Tiếp tục quét</button> : null}
                     <button className="button button--secondary stk-management-touch" type="button" disabled={busy} onClick={() => handleExport(stocktake)}>Xuất Excel</button>
@@ -266,7 +291,7 @@ export default function StocktakeManagement({
           products={products}
           appUser={appUser}
           busy={busy}
-          onClose={() => onSelectStocktake(null)}
+          onClose={closeDetail}
           onEdit={onEdit}
           onContinueScan={onContinueScan}
           onExport={handleExport}

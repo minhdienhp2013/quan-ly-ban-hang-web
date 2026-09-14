@@ -219,6 +219,35 @@ test('management UI keeps realtime selected id semantics and no hard delete acti
   assert.doesNotMatch(`${page}\n${management}`, /Xóa vĩnh viễn|deleteStocktake|hard delete/i);
 });
 
+test('Stocktake detail dialog traps keyboard focus and restores the exact opener', () => {
+  const detail = fs.readFileSync('src/modules/stocktake/StocktakeDetail.tsx', 'utf8');
+  const management = fs.readFileSync('src/modules/stocktake/StocktakeManagement.tsx', 'utf8');
+
+  assert.match(detail, /role="dialog"/);
+  assert.match(detail, /aria-modal="true"/);
+  assert.match(detail, /aria-labelledby="stk-detail-title"/);
+  assert.match(detail, /ref=\{dialogRef\}/);
+  assert.match(detail, /tabIndex=\{-1\}/);
+  assert.match(detail, /ref=\{closeButtonRef\}/);
+  assert.match(detail, /closeButton\.focus\(\)/);
+  assert.match(detail, /dialog\.focus\(\)/);
+  assert.match(detail, /event\.key === 'Escape'/);
+  assert.match(detail, /event\.key !== 'Tab'/);
+  assert.match(detail, /event\.shiftKey/);
+  assert.match(detail, /lastFocusable\.focus\(\)/);
+  assert.match(detail, /firstFocusable\.focus\(\)/);
+  assert.match(detail, /document\.addEventListener\('keydown', handleDialogKeyDown\)/);
+  assert.match(detail, /document\.removeEventListener\('keydown', handleDialogKeyDown\)/);
+
+  assert.match(management, /detailOpenerRef/);
+  assert.match(management, /document\.activeElement/);
+  assert.match(management, /activeElement instanceof HTMLElement/);
+  assert.match(management, /opener\?\.isConnected/);
+  assert.match(management, /opener\.focus\(\)/);
+  assert.match(management, /onClose=\{closeDetail\}/);
+  assert.equal((management.match(/onClick=\{\(\) => openDetail\(stocktake\.id\)\}/g) ?? []).length, 4);
+});
+
 test('STK-003 scanner and existing draft contracts remain in the integrated page', () => {
   const page = fs.readFileSync('src/modules/stocktake/StocktakePage.tsx', 'utf8');
   assert.match(page, /<BarcodeScanner[\s\S]*scanPolicy="leave-to-rearm"/);
