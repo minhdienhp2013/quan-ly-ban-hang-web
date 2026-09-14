@@ -1,95 +1,229 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
 import type { Product, Purchase, Supplier } from '../../types/models';
 import { subscribeProducts } from '../products/productService';
-import '../inventory/inventory.css';
-import { cancelPurchase, createPurchase, subscribePurchases, subscribeSuppliers, type PurchaseLineInput } from './purchaseService';
+import { subscribeSuppliers } from '../suppliers/supplierService';
+import PurchaseEditor from './PurchaseEditor';
+import PurchaseFilters from './PurchaseFilters';
+import PurchaseResponsiveList from './PurchaseResponsiveList';
+import PurchaseTable from './PurchaseTable';
+import PurchaseToolbar from './PurchaseToolbar';
+import { exportPurchaseListToExcel, exportPurchaseToExcel } from './purchaseExport';
+import {
+  buildPrintingInitialQuantities,
+  filterPurchases,
+  getLocalDayBoundary,
+  paginatePurchases,
+  resolveCreatorDisplay,
+  type PurchaseStatusFilter,
+} from './purchaseManagementViewModel';
+import { cancelPurchase, createPurchase, subscribePurchases, type CreatePurchaseInput } from './purchaseService';
+import './purchases.css';
 
-function money(value: number) { return new Intl.NumberFormat('vi-VN').format(value); }
-function dateTime(value: number) { return new Intl.DateTimeFormat('vi-VN', { dateStyle: 'short', timeStyle: 'short' }).format(value); }
-
-const emptyLine = (): PurchaseLineInput => ({ productId: '', quantity: 1, unitCost: 0 });
+type EditorSession = { key: number; source: Purchase | null } | null;
 
 export default function PurchasesPage() {
   const { appUser } = useAuth();
+  const navigate = useNavigate();
   const [products, setProducts] = useState<Product[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [purchases, setPurchases] = useState<Purchase[]>([]);
+  const [purchasesReady, setPurchasesReady] = useState(false);
+  const [productsReady, setProductsReady] = useState(false);
+  const [suppliersReady, setSuppliersReady] = useState(false);
+  const [query, setQuery] = useState('');
+  const [status, setStatus] = useState<PurchaseStatusFilter>('all');
   const [supplierId, setSupplierId] = useState('');
-  const [supplierName, setSupplierName] = useState('');
-  const [note, setNote] = useState('');
-  const [lines, setLines] = useState<PurchaseLineInput[]>([emptyLine()]);
-  const [busy, setBusy] = useState(false);
+  const [fromDate, setFromDate] = useState('');
+  const [toDate, setToDate] = useState('');
+  const [onlyMine, setOnlyMine] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const [selectedPurchaseId, setSelectedPurchaseId] = useState<string | null>(null);
+  const [editorSession, setEditorSession] = useState<EditorSession>(null);
+  const [creating, setCreating] = useState(false);
+  const [busyPurchaseId, setBusyPurchaseId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const detailOpenerRef = useRef<HTMLElement | null>(null);
+  const detailWasOpenRef = useRef(false);
 
   useEffect(() => {
     const onError = (cause: Error) => setError(cause.message);
     try {
-      const unsubProducts = subscribeProducts(setProducts, onError);
-      const unsubPurchases = subscribePurchases(setPurchases, onError);
-      const unsubSuppliers = subscribeSuppliers(setSuppliers, onError);
-      return () => { unsubProducts(); unsubPurchases(); unsubSuppliers(); };
+      const unsubPurchases = subscribePurchases((next) => { setPurchases(next); setPurchasesReady(true); }, onError);
+      const unsubProducts = subscribeProducts((next) => { setProducts(next); setProductsReady(true); }, onError);
+      const unsubSuppliers = subscribeSuppliers((next) => { setSuppliers(next); setSuppliersReady(true); }, onError);
+      return () => { unsubPurchases(); unsubProducts(); unsubSuppliers(); };
     } catch (cause) {
       onError(cause instanceof Error ? cause : new Error('Không thể kết nối dữ liệu nhập hàng.'));
       return undefined;
     }
   }, []);
 
-  const activeProducts = useMemo(() => products.filter((product) => product.active), [products]);
-  const total = useMemo(() => lines.reduce((sum, line) => sum + (Number(line.quantity) || 0) * (Number(line.unitCost) || 0), 0), [lines]);
+  const fromBoundary = getLocalDayBoundary(fromDate, 'start');
+  const toBoundary = getLocalDayBoundary(toDate, 'end');
+  const invalidDateRange = fromBoundary !== null && toBoundary !== null && fromBoundary > toBoundary;
 
-  function patchLine(index: number, patch: Partial<PurchaseLineInput>) {
-    setLines((current) => current.map((line, i) => i === index ? { ...line, ...patch } : line));
+  const filteredPurchases = useMemo(() => filterPurchases(purchases, suppliers, {
+    query,
+    status,
+    supplierId,
+    fromDate,
+    toDate,
+    onlyMine,
+    currentUserId: appUser?.uid,
+  }), [purchases, suppliers, query, status, supplierId, fromDate, toDate, onlyMine, appUser?.uid]);
+
+  const pagination = useMemo(() => paginatePurchases(filteredPurchases, page, pageSize), [filteredPurchases, page, pageSize]);
+  const loading = !purchasesReady || !productsReady || !suppliersReady;
+  const activeFilterCount = Number(status !== 'all') + Number(Boolean(supplierId)) + Number(Boolean(fromDate || toDate)) + Number(onlyMine);
+
+  useEffect(() => { setPage(1); }, [query, status, supplierId, fromDate, toDate, onlyMine]);
+  useEffect(() => { if (pagination.page !== page) setPage(pagination.page); }, [pagination.page, page]);
+  useEffect(() => {
+    if (selectedPurchaseId && !filteredPurchases.some((purchase) => purchase.id === selectedPurchaseId)) setSelectedPurchaseId(null);
+  }, [filteredPurchases, selectedPurchaseId]);
+  useEffect(() => {
+    if (selectedPurchaseId) {
+      detailWasOpenRef.current = true;
+      return;
+    }
+    if (!detailWasOpenRef.current) return;
+    detailWasOpenRef.current = false;
+    const opener = detailOpenerRef.current;
+    detailOpenerRef.current = null;
+    if (opener?.isConnected) opener.focus();
+  }, [selectedPurchaseId]);
+
+  function clearFilters() {
+    setStatus('all'); setSupplierId(''); setFromDate(''); setToDate(''); setOnlyMine(false); setNotice(null);
   }
 
-  async function submit() {
-    if (!appUser) return;
-    setBusy(true); setError(null); setSuccess(null);
+  function toggleDetail(purchaseId: string, opener: HTMLElement) {
+    detailOpenerRef.current = opener;
+    setSelectedPurchaseId((current) => current === purchaseId ? null : purchaseId);
+  }
+
+  function closeDetail() { setSelectedPurchaseId(null); }
+
+  function openCreate(source: Purchase | null = null) {
+    setError(null); setNotice(null); setSelectedPurchaseId(null);
+    setEditorSession({ key: Date.now(), source });
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  async function handleCreate(input: CreatePurchaseInput) {
+    if (!appUser || creating) throw new Error('Không thể xác định người dùng tạo phiếu.');
+    setCreating(true); setError(null); setNotice(null);
     try {
-      const selectedSupplier = suppliers.find((supplier) => supplier.id === supplierId);
-      const purchase = await createPurchase({
-        items: lines,
-        ...(supplierId ? { supplierId } : {}),
-        ...(selectedSupplier?.name || supplierName.trim() ? { supplierName: selectedSupplier?.name || supplierName.trim() } : {}),
-        ...(note.trim() ? { note } : {}),
-      }, appUser.uid);
-      setSuccess(`Đã tạo ${purchase.code}, tăng tồn và ghi stockMovements.`);
-      setLines([emptyLine()]); setNote(''); setSupplierId(''); setSupplierName('');
-    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Không thể tạo phiếu nhập.'); }
-    finally { setBusy(false); }
+      const purchase = await createPurchase(input, appUser.uid);
+      setEditorSession(null);
+      setNotice(`Đã tạo ${purchase.code}, tăng tồn và ghi lịch sử kho an toàn.`);
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  function handleExport(purchase: Purchase) {
+    setNotice(null); setError(null);
+    try {
+      exportPurchaseToExcel(purchase, suppliers, resolveCreatorDisplay(purchase.createdBy, appUser));
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Không thể xuất Excel phiếu nhập.');
+    }
+  }
+
+  function handleExportList() {
+    setNotice(null); setError(null);
+    if (invalidDateRange) { setError('Từ ngày không được sau Đến ngày.'); return; }
+    if (filteredPurchases.length === 0) { setNotice('Không có phiếu nhập phù hợp bộ lọc để xuất.'); return; }
+    try {
+      exportPurchaseListToExcel(filteredPurchases, suppliers, (createdBy) => resolveCreatorDisplay(createdBy, appUser));
+      setNotice(`Đã chuẩn bị Excel cho ${filteredPurchases.length} phiếu đang lọc.`);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Không thể xuất danh sách phiếu nhập.');
+    }
+  }
+
+  function handlePrint(purchase: Purchase) {
+    navigate('/qr-printing', {
+      state: {
+        initialQuantities: buildPrintingInitialQuantities(purchase),
+        source: 'purchase',
+        purchaseId: purchase.id,
+      },
+    });
   }
 
   async function handleCancel(purchase: Purchase) {
-    if (!appUser || !window.confirm(`Hủy ${purchase.code}? Hệ thống sẽ tạo PURCHASE_RETURN và giảm lại tồn kho.`)) return;
-    setBusy(true); setError(null); setSuccess(null);
-    try { await cancelPurchase(purchase.id, appUser.uid); setSuccess(`Đã hủy ${purchase.code} và hoàn tác tồn kho.`); }
-    catch (cause) { setError(cause instanceof Error ? cause.message : 'Không thể hủy phiếu nhập.'); }
-    finally { setBusy(false); }
+    if (!appUser || busyPurchaseId) return;
+    const confirmed = window.confirm(`Bạn có chắc muốn hủy phiếu ${purchase.code} và hoàn nhập toàn bộ số lượng? Thao tác này sẽ giảm tồn kho.`);
+    if (!confirmed) return;
+
+    setBusyPurchaseId(purchase.id); setError(null); setNotice(null);
+    try {
+      await cancelPurchase(purchase.id, appUser.uid);
+      setNotice(`Đã hủy ${purchase.code} và hoàn nhập toàn bộ số lượng.`);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Không thể hủy và hoàn nhập phiếu.');
+    } finally {
+      setBusyPurchaseId(null);
+    }
   }
 
-  return <div className="inv-shell">
-    <header className="inv-page-header"><div><p className="eyebrow">PUR-001 / PUR-002</p><h1>Nhập hàng</h1><p className="muted">Phiếu nhập hoàn tất sẽ tăng tồn, cập nhật giá vốn hiện tại và tạo movement PURCHASE trong cùng một atomic update.</p></div></header>
-    {error && <p className="form-error">{error}</p>}{success && <p className="inv-success">{success}</p>}
+  const listProps = {
+    purchases: pagination.items,
+    suppliers,
+    appUser,
+    selectedPurchaseId,
+    busyPurchaseId,
+    onToggleDetail: toggleDetail,
+    onCollapseDetail: closeDetail,
+    onExport: handleExport,
+    onPrint: handlePrint,
+    onCopy: (purchase: Purchase) => openCreate(purchase),
+    onCancel: (purchase: Purchase) => void handleCancel(purchase),
+  };
 
-    <section className="inv-card"><div><h2>Tạo phiếu nhập</h2><p className="muted">Có thể chọn nhà cung cấp đã có hoặc nhập tên tạm thời.</p></div>
-      <div className="inv-form-grid">
-        <label className="inv-field">Nhà cung cấp<select value={supplierId} onChange={(e) => setSupplierId(e.target.value)}><option value="">— Chưa chọn —</option>{suppliers.map((supplier) => <option key={supplier.id} value={supplier.id}>{supplier.code} - {supplier.name}</option>)}</select></label>
-        <label className="inv-field">Tên NCC (nếu chưa có danh mục)<input value={supplierName} disabled={Boolean(supplierId)} onChange={(e) => setSupplierName(e.target.value)} placeholder="Tên nhà cung cấp" /></label>
+  return (
+    <div className="purchase-page">
+      <header className="purchase-page-header"><div><h1>Nhập hàng</h1><p className="muted">Quản lý các phiếu nhập hàng và lịch sử nhập kho.</p></div></header>
+      {error ? <p className="form-error purchase-message" role="alert">{error}</p> : null}
+      {notice ? <p className="purchase-success purchase-message" role="status">{notice}</p> : null}
+
+      <div className="purchase-workspace">
+        <PurchaseFilters open={filtersOpen} status={status} supplierId={supplierId} fromDate={fromDate} toDate={toDate} onlyMine={onlyMine} suppliers={suppliers} onStatusChange={setStatus} onSupplierChange={setSupplierId} onFromDateChange={setFromDate} onToDateChange={setToDate} onOnlyMineChange={setOnlyMine} onClear={clearFilters} />
+
+        <main className="purchase-main">
+          <PurchaseToolbar query={query} filtersOpen={filtersOpen} activeFilterCount={activeFilterCount} exportDisabled={loading} onQueryChange={(value) => { setQuery(value); setNotice(null); }} onToggleFilters={() => setFiltersOpen((current) => !current)} onCreate={() => openCreate()} onExport={handleExportList} />
+
+          {editorSession ? <PurchaseEditor key={editorSession.key} products={products} suppliers={suppliers} sourcePurchase={editorSession.source} busy={creating} onClose={() => { if (!creating) setEditorSession(null); }} onSubmit={handleCreate} /> : null}
+
+          <section className="purchase-list-panel" aria-label="Danh sách phiếu nhập">
+            <div className="purchase-list-heading"><span>{loading ? 'Đang tải phiếu nhập...' : `Hiển thị ${filteredPurchases.length} phiếu nhập hàng`}</span></div>
+            {invalidDateRange ? <p className="form-error purchase-inline-error" role="alert">Từ ngày không được sau Đến ngày.</p> : null}
+
+            {loading ? (
+              <div className="purchase-empty">Đang tải dữ liệu nhập hàng...</div>
+            ) : filteredPurchases.length === 0 ? (
+              <div className="purchase-empty"><strong>{purchases.length === 0 ? 'Chưa có phiếu nhập.' : 'Không có phiếu phù hợp bộ lọc.'}</strong><span>{purchases.length === 0 ? 'Bấm “+ Nhập hàng” để tạo phiếu đầu tiên.' : 'Thử thay đổi từ khóa hoặc đặt lại bộ lọc.'}</span></div>
+            ) : (
+              <><PurchaseTable {...listProps} /><PurchaseResponsiveList {...listProps} /></>
+            )}
+
+            {!loading && filteredPurchases.length > 0 ? (
+              <div className="purchase-pagination">
+                <label>Hiển thị <select value={pageSize} onChange={(event) => { setPageSize(Number(event.target.value)); setPage(1); closeDetail(); }}><option value={5}>5</option><option value={10}>10</option><option value={20}>20</option></select> / trang</label>
+                <span>Trang {pagination.page}/{pagination.totalPages} · {pagination.totalRows} phiếu</span>
+                <div><button type="button" className="button button--secondary purchase-touch" disabled={pagination.page <= 1} onClick={() => { closeDetail(); setPage((current) => Math.max(1, current - 1)); }}>‹</button><button type="button" className="button button--secondary purchase-touch" disabled={pagination.page >= pagination.totalPages} onClick={() => { closeDetail(); setPage((current) => Math.min(pagination.totalPages, current + 1)); }}>›</button></div>
+              </div>
+            ) : null}
+          </section>
+        </main>
       </div>
-      <div className="inv-line-editor">{lines.map((line, index) => <div className="inv-line" key={index}>
-        <label className="inv-field">Sản phẩm<select value={line.productId} onChange={(e) => { const product = activeProducts.find((item) => item.id === e.target.value); patchLine(index, { productId: e.target.value, unitCost: product?.costPrice ?? 0 }); }}><option value="">Chọn sản phẩm</option>{activeProducts.map((product) => <option key={product.id} value={product.id}>{product.sku} - {product.name} (tồn {product.stockQuantity})</option>)}</select></label>
-        <label className="inv-field">Số lượng<input type="number" inputMode="decimal" min="0.001" step="0.001" value={line.quantity} onChange={(e) => patchLine(index, { quantity: Number(e.target.value) })} /></label>
-        <label className="inv-field">Giá nhập<input type="number" inputMode="numeric" min="0" step="1" value={line.unitCost} onChange={(e) => patchLine(index, { unitCost: Number(e.target.value) })} /></label>
-        <button className="button button--secondary" type="button" disabled={lines.length === 1} onClick={() => setLines((current) => current.filter((_, i) => i !== index))}>Xóa dòng</button>
-      </div>)}</div>
-      <div className="inv-actions"><button className="button button--secondary" type="button" onClick={() => setLines((current) => [...current, emptyLine()])}>+ Thêm dòng</button><strong>Tổng: {money(Math.round(total))} đ</strong></div>
-      <label className="inv-field">Ghi chú<textarea value={note} onChange={(e) => setNote(e.target.value)} /></label>
-      <div className="inv-actions"><button className="button button--primary" type="button" disabled={busy || !appUser} onClick={submit}>{busy ? 'Đang xử lý...' : 'Hoàn tất nhập hàng'}</button></div>
-    </section>
-
-    <section className="inv-card"><div><h2>Phiếu nhập gần đây</h2><p className="muted">Hủy phiếu chỉ thực hiện khi kho còn đủ số lượng để trả lại phần đã nhập.</p></div>
-      {purchases.length === 0 ? <p className="muted">Chưa có phiếu nhập.</p> : <div className="inv-list">{purchases.slice(0,100).map((purchase) => <article className="inv-record" key={purchase.id}><div className="inv-record__meta"><strong>{purchase.code} · {money(purchase.total)} đ</strong><span>{purchase.supplierName || 'Không ghi NCC'} · {dateTime(purchase.createdAt)} · {purchase.items.length} mặt hàng</span><span className={`inv-badge ${purchase.status === 'completed' ? 'inv-badge--ok' : 'inv-badge--cancelled'}`}>{purchase.status === 'completed' ? 'Hoàn tất' : 'Đã hủy'}</span></div><div className="inv-record__actions">{purchase.status === 'completed' && <button className="button button--secondary" type="button" disabled={busy} onClick={() => handleCancel(purchase)}>Hủy / hoàn nhập</button>}</div></article>)}</div>}
-    </section>
-  </div>;
+    </div>
+  );
 }
