@@ -9,6 +9,7 @@ import {
   getPurchaseActionCapabilities,
   getPurchaseStatusLabel,
   getPurchaseTotals,
+  isPurchaseDataLoading,
   paginatePurchases,
   resolveCreatorDisplay,
   resolveSupplierCode,
@@ -103,6 +104,14 @@ test('pagination clamps page and supports only 5, 10, 20 rows per page', () => {
   assert.equal(paginatePurchases(rows, 1, 7).pageSize, 10);
 });
 
+test('source loading state treats ready and error as terminal, never error as pending', () => {
+  assert.equal(isPurchaseDataLoading({ purchases: 'pending', products: 'ready', suppliers: 'ready' }), true);
+  assert.equal(isPurchaseDataLoading({ purchases: 'error', products: 'ready', suppliers: 'ready' }), false);
+  assert.equal(isPurchaseDataLoading({ purchases: 'ready', products: 'error', suppliers: 'ready' }), false);
+  assert.equal(isPurchaseDataLoading({ purchases: 'ready', products: 'ready', suppliers: 'error' }), false);
+  assert.equal(isPurchaseDataLoading({ purchases: 'ready', products: 'ready', suppliers: 'ready' }), false);
+});
+
 test('action matrix keeps completed immutable and cancelled non-reversible', () => {
   assert.deepEqual({ ...getPurchaseActionCapabilities('completed') }, { view: true, exportExcel: true, print: true, copy: true, cancel: true });
   assert.deepEqual({ ...getPurchaseActionCapabilities('cancelled') }, { view: true, exportExcel: true, print: false, copy: true, cancel: false });
@@ -170,6 +179,20 @@ test('inline detail is an accessible region, not a modal, and selection is realt
   assert.match(page, /opener\.focus\(\)/);
 });
 
+test('subscription errors settle their source and render a dedicated error state instead of false empty/loading', () => {
+  const page = fs.readFileSync('src/modules/purchases/PurchasesPage.tsx', 'utf8');
+  assert.match(page, /sourceError\('phiếu nhập', setPurchasesLoadState\)/);
+  assert.match(page, /sourceError\('sản phẩm', setProductsLoadState\)/);
+  assert.match(page, /sourceError\('nhà cung cấp', setSuppliersLoadState\)/);
+  assert.match(page, /setLoadState\('error'\)/);
+  assert.match(page, /const loading = isPurchaseDataLoading\(loadState\)/);
+  assert.match(page, /hasLoadError \? \(/);
+  assert.match(page, /Không thể tải đầy đủ dữ liệu nhập hàng/);
+  assert.match(page, /unsubPurchases\?\.\(\)/);
+  assert.match(page, /unsubProducts\?\.\(\)/);
+  assert.match(page, /unsubSuppliers\?\.\(\)/);
+});
+
 test('create/copy/cancel UI preserves existing inventory and printing boundaries', () => {
   const page = fs.readFileSync('src/modules/purchases/PurchasesPage.tsx', 'utf8');
   const editor = fs.readFileSync('src/modules/purchases/PurchaseEditor.tsx', 'utf8');
@@ -194,4 +217,31 @@ test('responsive Purchase UI uses desktop table, tablet/mobile cards and inline 
   assert.match(css, /@media\(max-width:700px\)[\s\S]*\.purchase-detail-table-wrap\{display:none/);
   assert.match(css, /@media\(max-width:700px\)[\s\S]*\.purchase-detail-mobile-items\{display:grid/);
   assert.match(css, /@media\(max-width:430px\)/);
+});
+
+test('UX blocker regression: mobile chevron stays in card grid and long SKU wraps', () => {
+  const css = fs.readFileSync('src/modules/purchases/purchases.css', 'utf8');
+  const mobile430 = css.slice(css.indexOf('@media(max-width:430px)'));
+  assert.doesNotMatch(mobile430, /\.purchase-card-side>span:last-child\{position:absolute/);
+  assert.match(mobile430, /\.purchase-card-side>span:last-child\{grid-column:3;grid-row:1;justify-self:end/);
+  assert.match(css, /\.purchase-detail-mobile-items article>div strong\{min-width:0;overflow-wrap:anywhere\}/);
+});
+
+test('UX blocker regression: editor leaves unsafe five-column minimum layout by 1100px', () => {
+  const css = fs.readFileSync('src/modules/purchases/purchases.css', 'utf8');
+  const tablet = css.slice(css.indexOf('@media(max-width:1100px)'), css.indexOf('@media(max-width:900px)'));
+  assert.match(tablet, /\.purchase-editor-line--header\{display:none\}/);
+  assert.match(tablet, /\.purchase-editor-line\{grid-template-columns:minmax\(0,1fr\) minmax\(110px,.45fr\) minmax\(125px,.5fr\) 44px\}/);
+  assert.match(tablet, /\.purchase-editor-line>label:first-child\{grid-column:1\/-1\}/);
+  assert.match(tablet, /\.purchase-mobile-label\{display:block/);
+  assert.doesNotMatch(tablet, /minmax\(200px|100px 120px 130px 40px/);
+});
+
+test('important Purchase controls keep approximately 44px touch targets', () => {
+  const css = fs.readFileSync('src/modules/purchases/purchases.css', 'utf8');
+  assert.match(css, /\.purchase-code-button,.purchase-view-button\{min-height:44px/);
+  assert.match(css, /\.purchase-collapse-button\{width:44px;height:44px/);
+  assert.match(css, /\.purchase-editor-remove\{width:44px;height:44px/);
+  assert.match(css, /\.purchase-filters fieldset label,.purchase-filter-check\{[^}]*min-height:44px/);
+  assert.match(css, /\.purchase-pagination select\{min-height:44px/);
 });
