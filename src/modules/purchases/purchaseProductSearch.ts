@@ -51,7 +51,8 @@ function getRank(product: Product, query: string, aliases?: SearchAliases): Omit
     return { rank: 8, kind: 'name-compact' };
   }
 
-  if (queryForms.compact && nameForms.compact.includes(queryForms.compact)) {
+  const queryCompactWasExpanded = queryForms.expandedCompact !== queryForms.compact;
+  if (!queryCompactWasExpanded && queryForms.compact && nameForms.compact.includes(queryForms.compact)) {
     return { rank: 8, kind: 'name-compact' };
   }
 
