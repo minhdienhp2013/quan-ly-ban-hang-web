@@ -39,8 +39,17 @@ export default function GoodsBulkActionBar({
           Bỏ chọn
         </button>
         {showPermanentDelete ? (
-          <span className="goods-bulk-danger-slot">
-            <button className="button goods-danger-button goods-touch" type="button" onClick={onPermanentDelete} disabled={busy}>
+          <span
+            className="goods-bulk-danger-slot"
+            style={{ marginLeft: 12, paddingLeft: 12, borderLeft: '1px solid #efb4b4' }}
+          >
+            <button
+              className="button goods-touch"
+              style={{ color: '#b42318', borderColor: '#e6a2a2', background: '#fff1f1' }}
+              type="button"
+              onClick={onPermanentDelete}
+              disabled={busy}
+            >
               {deleting ? 'Đang kiểm tra/xóa...' : 'Xóa vĩnh viễn đã chọn'}
             </button>
           </span>
