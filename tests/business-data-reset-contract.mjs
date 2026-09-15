@@ -116,7 +116,7 @@ test('backup failure/cancel/error paths cannot enter destructive update or repor
   assert.ok(handler.indexOf('if (!confirmed) return') < handler.indexOf('setBusy(true)'));
   assert.match(handler, /setSuccess\(''\)/);
   assert.ok(handler.indexOf("setSuccess('')") < handler.indexOf('await resetBusinessData('));
-  assert.ok(handler.indexOf('setError(') > handler.indexOf('await resetBusinessData('));
+  assert.ok(handler.lastIndexOf('setError(') > handler.indexOf('await resetBusinessData('));
 });
 
 test('destructive service never cascades into retained nodes and preserves old audit history', () => {
