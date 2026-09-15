@@ -25,6 +25,21 @@ interface PrintWorkspaceProps {
 
 const LEGACY_QR_SIZE_MM = 14;
 
+export function partitionProductsSelectedFirst(
+  products: readonly Product[],
+  quantities: Readonly<Record<string, number>>,
+): Product[] {
+  const selected: Product[] = [];
+  const unselected: Product[] = [];
+
+  for (const product of products) {
+    if ((quantities[product.id] ?? 0) > 0) selected.push(product);
+    else unselected.push(product);
+  }
+
+  return [...selected, ...unselected];
+}
+
 export function sanitizeInitialQuantities(
   products: readonly Product[],
   initialQuantities: unknown,
@@ -80,12 +95,15 @@ export default function PrintWorkspace({ products, initialQuantities }: PrintWor
 
   const filteredProducts = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase('vi');
-    if (!normalized) return products;
-    return products.filter((product) =>
-      [product.name, product.sku, product.barcode, product.qrCode]
-        .some((value) => value?.toLocaleLowerCase('vi').includes(normalized)),
-    );
-  }, [products, query]);
+    const matchingProducts = !normalized
+      ? products
+      : products.filter((product) =>
+          [product.name, product.sku, product.barcode, product.qrCode]
+            .some((value) => value?.toLocaleLowerCase('vi').includes(normalized)),
+        );
+
+    return partitionProductsSelectedFirst(matchingProducts, quantities);
+  }, [products, query, quantities]);
 
   const labels = useMemo<PrintableLabel[]>(() => {
     const output: PrintableLabel[] = [];
