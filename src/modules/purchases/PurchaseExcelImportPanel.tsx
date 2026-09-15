@@ -153,6 +153,7 @@ export default function PurchaseExcelImportPanel({
         rows: preview.rows,
         selectedNewRowNumbers: selectedNewRows,
         actorUid,
+        currentProducts: products,
         progress,
       });
       setProgress(result.progress);
@@ -272,13 +273,15 @@ export default function PurchaseExcelImportPanel({
                   <tr key={row.rowNumber} className={`purchase-import-row purchase-import-row--${row.status.toLowerCase()}`}>
                     <td>
                       {row.status === 'NEW' ? (
-                        <input
-                          type="checkbox"
-                          aria-label={`Chọn hàng mới dòng ${row.rowNumber}`}
-                          checked={selectedNewRows.has(row.rowNumber)}
-                          onChange={() => toggleNewRow(row.rowNumber)}
-                          disabled={productsConfirmed || creatingProducts}
-                        />
+                        <label className="purchase-import-checkbox-hit">
+                          <input
+                            type="checkbox"
+                            aria-label={`Chọn hàng mới dòng ${row.rowNumber}`}
+                            checked={selectedNewRows.has(row.rowNumber)}
+                            onChange={() => toggleNewRow(row.rowNumber)}
+                            disabled={productsConfirmed || creatingProducts}
+                          />
+                        </label>
                       ) : <span aria-hidden="true">—</span>}
                     </td>
                     <td>{row.rowNumber}</td>
@@ -306,7 +309,7 @@ export default function PurchaseExcelImportPanel({
           <div className="purchase-import-supplier-grid">
             <label>Nhà cung cấp
               <select value={supplierId} onChange={(event) => handleSupplierChange(event.target.value)} disabled={creatingProducts}>
-                <option value="">— Chưa chọn danh mục —</option>
+                <option value="">— Chưa chọn nhà cung cấp —</option>
                 {activeSuppliers.map((supplier) => <option key={supplier.id} value={supplier.id}>{supplier.code} - {supplier.name}</option>)}
               </select>
             </label>
