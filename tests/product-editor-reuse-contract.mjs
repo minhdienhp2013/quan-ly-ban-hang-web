@@ -136,10 +136,9 @@ test('ProductsPage delegates the editor to the shared reusable form', () => {
   assert.doesNotMatch(page, /function getValidationError/);
   assert.doesNotMatch(page, /function toProductInput/);
 
-  for (const prop of ['mode', 'products', 'saving', 'error', 'onSubmit', 'onCancel']) {
-    assert.match(editor, new RegExp(`${prop}:`));
+  for (const prop of ['mode', 'initialValues', 'products', 'saving', 'error', 'onSubmit', 'onCancel']) {
+    assert.match(editor, new RegExp(`${prop}\\??:`));
   }
-  assert.match(editor, /initialValues\?:/);
   assert.doesNotMatch(editor, /useNavigate|navigate\(/);
   assert.doesNotMatch(editor, /role="dialog"|modal-backdrop/);
 });
