@@ -138,6 +138,14 @@ test('checkout buttons stay focusable during async processing and no fake invoic
   const page = read('src/modules/sales/SalesPage.tsx');
   assert.match(page, /sales-payment-button--cash[\s\S]*?aria-disabled=\{submitting/);
   assert.match(page, /sales-payment-button--bank[\s\S]*?aria-disabled=\{submitting/);
-  assert.doesNotMatch(page, /sales-payment-button--cash[\s\S]{0,300}?disabled=\{/);
+
+  for (const marker of ['sales-payment-button--cash', 'sales-payment-button--bank']) {
+    const start = page.indexOf(marker);
+    const end = page.indexOf('</button>', start);
+    const button = page.slice(start, end);
+    assert.ok(start >= 0 && end > start, `${marker} button not found`);
+    assert.doesNotMatch(button, /\sdisabled=\{/);
+  }
+
   assert.doesNotMatch(page, /In hóa đơn|window\.print\(/);
 });
