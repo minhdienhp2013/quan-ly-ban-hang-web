@@ -9,6 +9,12 @@ import PurchaseFilters from './PurchaseFilters';
 import PurchaseResponsiveList from './PurchaseResponsiveList';
 import PurchaseTable from './PurchaseTable';
 import PurchaseToolbar from './PurchaseToolbar';
+import {
+  clearPurchaseDraft,
+  guardPurchaseDraftReplacement,
+  loadPurchaseDraft,
+  type PurchaseDraft,
+} from './purchaseDraft';
 import { exportPurchaseListToExcel, exportPurchaseToExcel } from './purchaseExport';
 import {
   buildPrintingInitialQuantities,
@@ -24,7 +30,7 @@ import { cancelPurchase, createPurchase, subscribePurchases, type CreatePurchase
 import './purchases.css';
 import './purchaseSmartProductSearch.css';
 
-type EditorSession = { key: number; source: Purchase | null } | null;
+type EditorSession = { key: number; source: Purchase | null; draft: PurchaseDraft | null } | null;
 
 export default function PurchasesPage() {
   const { appUser } = useAuth();
@@ -52,6 +58,7 @@ export default function PurchasesPage() {
   const [notice, setNotice] = useState<string | null>(null);
   const detailOpenerRef = useRef<HTMLElement | null>(null);
   const detailWasOpenRef = useRef(false);
+  const restoredDraftUidRef = useRef<string | null>(null);
 
   useEffect(() => {
     let unsubPurchases: (() => void) | undefined;
@@ -105,6 +112,20 @@ export default function PurchasesPage() {
       unsubSuppliers?.();
     };
   }, []);
+
+  useEffect(() => {
+    const uid = appUser?.uid ?? '';
+    if (!uid) {
+      restoredDraftUidRef.current = null;
+      return;
+    }
+    if (restoredDraftUidRef.current === uid) return;
+    restoredDraftUidRef.current = uid;
+
+    const draft = loadPurchaseDraft(uid);
+    if (!draft) return;
+    setEditorSession((current) => current ?? { key: Date.now(), source: null, draft });
+  }, [appUser?.uid]);
 
   const fromBoundary = getLocalDayBoundary(fromDate, 'start');
   const toBoundary = getLocalDayBoundary(toDate, 'end');
@@ -167,8 +188,11 @@ export default function PurchasesPage() {
   function closeDetail() { setSelectedPurchaseId(null); }
 
   function openCreate(source: Purchase | null = null) {
+    const uid = appUser?.uid ?? '';
+    if (uid && !guardPurchaseDraftReplacement(uid, (message) => window.confirm(message))) return;
+
     setError(null); setNotice(null); setSelectedPurchaseId(null);
-    setEditorSession({ key: Date.now(), source });
+    setEditorSession({ key: Date.now(), source, draft: null });
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
@@ -177,6 +201,7 @@ export default function PurchasesPage() {
     setCreating(true); setError(null); setNotice(null);
     try {
       const purchase = await createPurchase(input, appUser.uid);
+      clearPurchaseDraft(appUser.uid);
       setEditorSession(null);
       setQuery('');
       setStatus('all');
@@ -266,7 +291,7 @@ export default function PurchasesPage() {
         <main className="purchase-main">
           <PurchaseToolbar query={query} filtersOpen={filtersOpen} activeFilterCount={activeFilterCount} exportDisabled={loading || hasLoadError} onQueryChange={(value) => { setQuery(value); setNotice(null); }} onToggleFilters={() => setFiltersOpen((current) => !current)} onCreate={() => openCreate()} onExport={handleExportList} />
 
-          {editorSession ? <PurchaseEditor key={editorSession.key} products={products} suppliers={suppliers} actorUid={appUser?.uid ?? ''} sourcePurchase={editorSession.source} busy={creating} onClose={() => { if (!creating) setEditorSession(null); }} onSubmit={handleCreate} /> : null}
+          {editorSession ? <PurchaseEditor key={editorSession.key} products={products} suppliers={suppliers} actorUid={appUser?.uid ?? ''} sourcePurchase={editorSession.source} initialDraft={editorSession.draft} busy={creating} onClose={() => { if (!creating) setEditorSession(null); }} onSubmit={handleCreate} /> : null}
 
           <section className="purchase-list-panel" aria-label="Danh sách phiếu nhập">
             <div className="purchase-list-heading"><span>{loading ? 'Đang tải phiếu nhập...' : hasLoadError ? 'Không thể tải đầy đủ dữ liệu nhập hàng' : `Hiển thị ${filteredPurchases.length} phiếu nhập hàng`}</span></div>

@@ -1,7 +1,9 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { Product } from '../../types/models';
-import { normalizeSearchCode } from '../../shared/search/searchNormalization';
+import ProductEditorForm from '../products/ProductEditorForm';
 import { createProduct, type ProductInput } from '../products/productService';
+import '../products/products.css';
+import { resolvePurchaseModalFocusTarget } from './purchaseModalFocus';
 
 interface PurchaseQuickAddProductProps {
   products: readonly Product[];
@@ -11,55 +13,14 @@ interface PurchaseQuickAddProductProps {
   onClose: () => void;
 }
 
-interface QuickProductForm {
-  sku: string;
-  name: string;
-  barcode: string;
-  qrCode: string;
-  unit: string;
-  costPrice: string;
-  salePrice: string;
-}
-
-export function getQuickAddProductValidationError(form: QuickProductForm, products: readonly Product[]) {
-  const sku = form.sku.trim();
-  const name = form.name.trim();
-  const costPrice = Number(form.costPrice);
-  const salePrice = Number(form.salePrice);
-
-  if (!sku) return 'SKU là bắt buộc.';
-  if (!name) return 'Tên sản phẩm là bắt buộc.';
-  if (!Number.isFinite(costPrice) || costPrice < 0) return 'Giá vốn phải là số từ 0 trở lên.';
-  if (!Number.isFinite(salePrice) || salePrice < 0) return 'Giá bán phải là số từ 0 trở lên.';
-  if (products.some((product) => normalizeSearchCode(product.sku) === normalizeSearchCode(sku))) {
-    return `SKU “${sku}” đã được sử dụng.`;
-  }
-
-  const barcode = form.barcode.trim();
-  if (barcode && products.some((product) => normalizeSearchCode(product.barcode) === normalizeSearchCode(barcode))) {
-    return `Barcode “${barcode}” đã được sử dụng.`;
-  }
-
-  const qrCode = form.qrCode.trim();
-  if (qrCode && products.some((product) => normalizeSearchCode(product.qrCode) === normalizeSearchCode(qrCode))) {
-    return `Mã QR “${qrCode}” đã được sử dụng.`;
-  }
-
-  return null;
-}
-
-function toProductInput(form: QuickProductForm): ProductInput {
-  return {
-    sku: form.sku.trim(),
-    name: form.name.trim(),
-    barcode: form.barcode.trim() || undefined,
-    qrCode: form.qrCode.trim() || undefined,
-    unit: form.unit.trim() || undefined,
-    costPrice: Number(form.costPrice),
-    salePrice: Number(form.salePrice),
-    active: true,
-  };
-}
+const FOCUSABLE_SELECTOR = [
+  'button:not([disabled])',
+  'input:not([disabled])',
+  'select:not([disabled])',
+  'textarea:not([disabled])',
+  '[href]',
+  '[tabindex]:not([tabindex="-1"])',
+].join(',');
 
 export default function PurchaseQuickAddProduct({
   products,
@@ -68,70 +29,134 @@ export default function PurchaseQuickAddProduct({
   onCreated,
   onClose,
 }: PurchaseQuickAddProductProps) {
-  const [form, setForm] = useState<QuickProductForm>({
-    sku: '',
-    name: initialName.trim(),
-    barcode: '',
-    qrCode: '',
-    unit: '',
-    costPrice: '0',
-    salePrice: '0',
-  });
+  const titleId = useId();
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const closeRef = useRef(onClose);
+  const savingRef = useRef(false);
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const initialValues = useMemo(() => ({ name: initialName.trim() }), [initialName]);
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  useEffect(() => {
+    closeRef.current = onClose;
+  }, [onClose]);
+
+  useEffect(() => {
+    savingRef.current = saving;
+  }, [saving]);
+
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    const frame = requestAnimationFrame(() => {
+      const dialog = dialogRef.current;
+      const first = dialog?.querySelector<HTMLElement>(FOCUSABLE_SELECTOR);
+      (first ?? dialog)?.focus();
+    });
+
+    function handleKeyDown(event: KeyboardEvent) {
+      const dialog = dialogRef.current;
+      if (!dialog) return;
+
+      if (event.key === 'Escape') {
+        if (savingRef.current) return;
+        event.preventDefault();
+        closeRef.current();
+        return;
+      }
+
+      if (event.key !== 'Tab') return;
+      const focusable = [...dialog.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)]
+        .filter((element) => !element.hasAttribute('disabled') && element.getAttribute('aria-hidden') !== 'true');
+      const activeElement = document.activeElement;
+      const activeIndex = activeElement ? focusable.indexOf(activeElement as HTMLElement) : -1;
+      const focusTarget = resolvePurchaseModalFocusTarget({
+        focusableCount: focusable.length,
+        activeIndex,
+        activeInsideDialog: Boolean(activeElement && dialog.contains(activeElement)),
+        shiftKey: event.shiftKey,
+      });
+
+      if (!focusTarget) return;
+      event.preventDefault();
+
+      if (focusTarget === 'dialog') {
+        dialog.focus();
+        return;
+      }
+
+      const target = focusTarget === 'first' ? focusable[0] : focusable[focusable.length - 1];
+      target?.focus();
+    }
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      cancelAnimationFrame(frame);
+      document.removeEventListener('keydown', handleKeyDown);
+      document.body.style.overflow = previousOverflow;
+    };
+  }, []);
+
+  async function handleSubmit(input: ProductInput) {
     if (saving) return;
     if (!actorUid) {
       setError('Không thể xác định người dùng tạo sản phẩm.');
       return;
     }
 
-    const validationError = getQuickAddProductValidationError(form, products);
-    if (validationError) {
-      setError(validationError);
-      return;
-    }
-
     setSaving(true);
-    setError('');
+    setError(null);
     try {
-      const created = await createProduct(toProductInput(form), actorUid);
+      const created = await createProduct(input, actorUid);
       onCreated(created);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Không thể thêm sản phẩm.');
-    } finally {
       setSaving(false);
     }
   }
 
+  function requestClose() {
+    if (saving) return;
+    onClose();
+  }
+
   return (
-    <section className="purchase-quick-add" aria-labelledby="purchase-quick-add-title">
-      <div className="purchase-quick-add-heading">
-        <div>
-          <p className="eyebrow">Thêm nhanh hàng hóa</p>
-          <h3 id="purchase-quick-add-title">Tạo sản phẩm mới</h3>
-          <p className="muted">Sản phẩm mới bắt đầu tồn 0 và dùng đúng Product service hiện tại.</p>
+    <div
+      className="purchase-product-modal-backdrop"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) requestClose();
+      }}
+    >
+      <div
+        ref={dialogRef}
+        className="purchase-product-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        tabIndex={-1}
+      >
+        <div className="purchase-product-modal-heading">
+          <div>
+            <p className="eyebrow">Thêm nhanh hàng hóa</p>
+            <h2 id={titleId}>Thêm sản phẩm mới</h2>
+            <p className="muted">Sản phẩm được tạo trong danh mục chung và bắt đầu với tồn kho 0.</p>
+          </div>
+          <button className="button button--secondary purchase-touch" type="button" onClick={requestClose} disabled={saving}>Đóng</button>
         </div>
-        <button className="button button--secondary purchase-touch" type="button" onClick={onClose} disabled={saving}>Đóng</button>
+
+        <div className="purchase-product-modal-body">
+          <ProductEditorForm
+            mode="create"
+            initialValues={initialValues}
+            products={products}
+            saving={saving}
+            error={error}
+            onSubmit={handleSubmit}
+            onCancel={requestClose}
+          />
+        </div>
       </div>
-
-      <form className="purchase-quick-add-form" onSubmit={(event) => void handleSubmit(event)}>
-        <label>SKU *<input autoFocus value={form.sku} onChange={(event) => setForm({ ...form, sku: event.target.value })} required /></label>
-        <label className="purchase-quick-add-wide">Tên sản phẩm *<input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} required /></label>
-        <label>Barcode<input value={form.barcode} onChange={(event) => setForm({ ...form, barcode: event.target.value })} /></label>
-        <label>Mã QR<input value={form.qrCode} onChange={(event) => setForm({ ...form, qrCode: event.target.value })} /></label>
-        <label>Đơn vị<input value={form.unit} onChange={(event) => setForm({ ...form, unit: event.target.value })} /></label>
-        <label>Giá vốn *<input type="number" min="0" step="1" inputMode="numeric" value={form.costPrice} onChange={(event) => setForm({ ...form, costPrice: event.target.value })} required /></label>
-        <label>Giá bán *<input type="number" min="0" step="1" inputMode="numeric" value={form.salePrice} onChange={(event) => setForm({ ...form, salePrice: event.target.value })} required /></label>
-
-        {error ? <p className="form-error purchase-quick-add-error" role="alert">{error}</p> : null}
-        <div className="purchase-quick-add-actions">
-          <button className="button button--secondary purchase-touch" type="button" onClick={onClose} disabled={saving}>Hủy</button>
-          <button className="button button--primary purchase-touch" type="submit" disabled={saving}>{saving ? 'Đang tạo...' : 'Tạo và chọn sản phẩm'}</button>
-        </div>
-      </form>
-    </section>
+    </div>
   );
 }

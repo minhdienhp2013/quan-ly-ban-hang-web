@@ -21,7 +21,7 @@ interface PurchaseProductPickerProps {
   onSelect: (product: Product) => void;
   onClearSelection: () => void;
   onScanRequest: (lineKey: string) => void;
-  onQuickAddRequest: (lineKey: string, query: string) => void;
+  onQuickAddRequest: (lineKey: string, query: string, opener: HTMLButtonElement) => void;
 }
 
 function productLabel(product: Product) {
@@ -108,9 +108,9 @@ export default function PurchaseProductPicker({
     onScanRequest(lineKey);
   }
 
-  function handleQuickAddRequest() {
+  function handleQuickAddRequest(opener: HTMLButtonElement) {
     closeResults();
-    onQuickAddRequest(lineKey, query);
+    onQuickAddRequest(lineKey, query, opener);
   }
 
   function handleKeyDown(event: KeyboardEvent<HTMLInputElement>) {
@@ -227,7 +227,7 @@ export default function PurchaseProductPicker({
           aria-label="Thêm nhanh hàng hóa mới"
           title="Thêm nhanh hàng hóa mới"
           disabled={disabled}
-          onClick={handleQuickAddRequest}
+          onClick={(event) => handleQuickAddRequest(event.currentTarget)}
         >
           +
         </button>
