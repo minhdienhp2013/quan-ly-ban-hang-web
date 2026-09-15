@@ -288,6 +288,7 @@ export default function PurchaseEditor({
           <p className="eyebrow">{sourcePurchase ? 'Sao chép thành phiếu mới' : restoredDraft ? 'Khôi phục phiếu đang soạn' : 'Phiếu nhập mới'}</p>
           <h2 id="purchase-editor-title">{sourcePurchase ? 'Sao chép để sửa' : 'Nhập hàng'}</h2>
           <p className="muted">{sourcePurchase ? `Dữ liệu được sao chép từ ${sourcePurchase.code}. Chưa có gì được ghi vào kho cho tới khi hoàn tất.` : restoredDraft ? 'Phiếu đang soạn đã được khôi phục từ phiên làm việc này. Chưa có thay đổi tồn kho.' : 'Phiếu chỉ được ghi vào Firebase và tăng tồn khi bấm Hoàn tất nhập hàng.'}</p>
+          <p className="muted purchase-editor-price-note">Giá bán bạn chỉnh tại đây chỉ cập nhật giá bán hiện tại của sản phẩm trong Hàng hóa sau khi phiếu nhập được hoàn tất thành công; trước khi hoàn tất, danh mục sản phẩm chưa thay đổi.</p>
         </div>
         <button className="button button--secondary purchase-touch" type="button" onClick={requestCloseEditor} disabled={busy}>Đóng</button>
       </div>
@@ -315,7 +316,7 @@ export default function PurchaseEditor({
         ) : null}
 
         <div className="purchase-editor-lines" aria-label="Danh sách sản phẩm nhập">
-          <div className="purchase-editor-line purchase-editor-line--header" aria-hidden="true"><span>Sản phẩm</span><span>Số lượng</span><span>Giá nhập</span><span>Giá bán</span><span>Thành tiền</span><span /></div>
+          <div className="purchase-editor-line purchase-editor-line--header" aria-hidden="true"><span>Sản phẩm</span><span>Số lượng</span><span>Giá nhập</span><span>Giá bán</span><span>Thành tiền</span><span>Xóa</span></div>
           {lines.map((line, index) => {
             const activeProduct = activeProductById.get(line.productId);
             const unavailable = Boolean(line.productId && !activeProduct);
@@ -339,7 +340,7 @@ export default function PurchaseEditor({
                   </div>
                   <label><span className="purchase-mobile-label">Số lượng</span><input ref={(node) => { if (node) quantityInputRefs.current.set(line.key, node); else quantityInputRefs.current.delete(line.key); }} type="number" inputMode="decimal" min="0.001" step="0.001" value={line.quantity} onChange={(event) => patchLine(line.key, { quantity: Number(event.target.value) })} /></label>
                   <label><span className="purchase-mobile-label">Giá nhập</span><input type="number" inputMode="numeric" min="0" step="1" value={line.unitCost} onChange={(event) => patchLine(line.key, { unitCost: Number(event.target.value) })} /></label>
-                  <label><span className="purchase-mobile-label">Giá bán</span><input type="number" inputMode="numeric" min="0" step="1" value={line.salePrice ?? ''} onChange={(event) => patchLine(line.key, { salePrice: Number(event.target.value) })} /></label>
+                  <label><span className="purchase-mobile-label">Giá bán</span><input aria-label="Giá bán" type="number" inputMode="numeric" min="0" step="1" value={line.salePrice ?? ''} onChange={(event) => patchLine(line.key, { salePrice: Number(event.target.value) })} /></label>
                   <strong className="purchase-editor-line-total">{money(line.quantity * line.unitCost)} đ</strong>
                   <button className="purchase-editor-remove" type="button" onClick={() => removeLine(line.key)} disabled={busy || lines.length === 1} aria-label={`Xóa dòng ${index + 1}`}>×</button>
                 </div>

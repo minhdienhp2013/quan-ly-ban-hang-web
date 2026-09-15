@@ -70,12 +70,22 @@ test('old draft, copied Purchase and Excel handoff resolve missing salePrice fro
   assert.doesNotMatch(excelDraft, /salePrice/);
 });
 
-test('sale-price input is labeled, numeric VND, editable and submit carries the transient value', () => {
+test('sale-price input has a persistent accessible name, numeric VND editing and transient submit value', () => {
   const editor = fs.readFileSync('src/modules/purchases/PurchaseEditor.tsx', 'utf8');
-  assert.match(editor, /<span className="purchase-mobile-label">Giá bán<\/span><input type="number" inputMode="numeric" min="0" step="1"/);
+  const css = fs.readFileSync('src/modules/purchases/purchases.css', 'utf8');
+  assert.match(editor, /<span className="purchase-mobile-label">Giá bán<\/span><input aria-label="Giá bán" type="number" inputMode="numeric" min="0" step="1"/);
+  assert.match(css, /\.purchase-mobile-label\{display:none\}/);
+  assert.match(css, /\.purchase-editor input,\.purchase-editor select,\.purchase-editor textarea\{[^}]*min-height:44px/);
   assert.match(editor, /salePrice: line\.salePrice as number/);
   assert.match(editor, /Giá bán không hợp lệ\./);
   assert.match(editor, /!Number\.isFinite\(line\.salePrice\) \|\| line\.salePrice < 0/);
+});
+
+test('Purchase editor explains sale-price catalog side effect and names the desktop delete column', () => {
+  const editor = fs.readFileSync('src/modules/purchases/PurchaseEditor.tsx', 'utf8');
+  assert.match(editor, /Giá bán bạn chỉnh tại đây chỉ cập nhật giá bán hiện tại của sản phẩm trong Hàng hóa sau khi phiếu nhập được hoàn tất thành công/);
+  assert.match(editor, /trước khi hoàn tất, danh mục sản phẩm chưa thay đổi/);
+  assert.match(editor, /<span>Sản phẩm<\/span><span>Số lượng<\/span><span>Giá nhập<\/span><span>Giá bán<\/span><span>Thành tiền<\/span><span>Xóa<\/span>/);
 });
 
 test('createPurchase validates salePrice and reuses the same commitStockOperation metadata update', () => {
@@ -113,14 +123,46 @@ test('draft/editor paths have no independent Product writer and Excel preview re
   assert.doesNotMatch(combined, /updateProduct\s*\(|commitStockOperation\s*\(|stockQuantity\s*=|stockVersion\s*=|increment\s*\(/);
 });
 
-test('responsive Purchase editor exposes six desktop columns and mobile sale-price label without page overflow contract regression', () => {
+test('responsive Purchase editor reflows by actual editor width and preserves mobile/touch contracts', () => {
   const css = fs.readFileSync('src/modules/purchases/purchases.css', 'utf8');
+  const smartCss = fs.readFileSync('src/modules/purchases/purchaseSmartProductSearch.css', 'utf8');
+  const appCss = fs.readFileSync('src/styles.css', 'utf8');
   const editor = fs.readFileSync('src/modules/purchases/PurchaseEditor.tsx', 'utf8');
-  assert.match(css, /\.purchase-page\{display:grid;gap:18px;min-width:0\}/);
-  assert.match(css, /\.purchase-editor-line\{display:grid;grid-template-columns:[^}]*44px/);
-  assert.match(css, /@media\(max-width:1100px\)/);
-  assert.match(css, /@media\(max-width:700px\)/);
-  assert.match(css, /@media\(max-width:430px\)/);
+
+  assert.match(appCss, /\.workspace\s*\{[\s\S]*?grid-template-columns:\s*250px minmax\(0, 1fr\)/);
+  assert.match(appCss, /@media \(max-width: 1050px\)[\s\S]*?grid-template-columns:\s*210px minmax\(0, 1fr\)/);
+  assert.match(appCss, /\.page-content\s*\{[\s\S]*?max-width:\s*1500px;[\s\S]*?padding:\s*clamp\(22px, 4vw, 40px\)/);
+  assert.match(css, /\.purchase-workspace\{[^}]*grid-template-columns:240px minmax\(0,1fr\)/);
+  assert.match(css, /\.purchase-editor\{padding:18px;container-type:inline-size\}/);
+  assert.match(css, /\.purchase-editor-line>\*\{min-width:0\}/);
+
+  const medium = css.slice(css.indexOf('@container(max-width:900px)'), css.indexOf('@container(max-width:620px)'));
+  assert.match(medium, /\.purchase-editor-line--header\{display:none\}/);
+  assert.match(medium, /\.purchase-editor-line\{grid-template-columns:repeat\(4,minmax\(0,1fr\)\) 44px\}/);
+  assert.match(medium, /\.purchase-editor-product-field\{grid-column:1\/-1\}/);
+  assert.match(medium, /\.purchase-mobile-label\{display:block/);
+
+  const narrow = css.slice(css.indexOf('@container(max-width:620px)'), css.indexOf('@media(max-width:1100px)'));
+  assert.match(narrow, /\.purchase-editor-line\{grid-template-columns:repeat\(2,minmax\(0,1fr\)\)\}/);
+
+  const viewport1100 = css.slice(css.indexOf('@media(max-width:1100px)'), css.indexOf('@media(max-width:900px)'));
+  assert.doesNotMatch(viewport1100, /\.purchase-editor-line\{grid-template-columns:/);
+
+  const mobile430 = css.slice(css.indexOf('@media(max-width:430px)'));
+  assert.match(mobile430, /\.purchase-editor-line\{grid-template-columns:1fr\}/);
+
+  assert.match(smartCss, /\.purchase-product-picker-row\{[^}]*grid-template-columns:minmax\(0,1fr\) 44px 44px/);
+  assert.match(smartCss, /\.purchase-product-icon-button\{[^}]*width:44px;height:44px;min-width:44px/);
+
+  const targetEditorWidths = {
+    1366: 1366 - 250 - 80 - 240 - 14 - 36,
+    1024: 1024 - 210 - 80 - 220 - 14 - 36,
+    768: 768 - 210 - (768 * 0.04 * 2) - 36,
+  };
+  assert.ok(targetEditorWidths[1366] <= 900);
+  assert.ok(targetEditorWidths[1024] <= 620);
+  assert.ok(targetEditorWidths[768] <= 620);
+
   assert.match(editor, /<span>Giá bán<\/span>/);
   assert.match(editor, /purchase-mobile-label">Giá bán/);
 });
