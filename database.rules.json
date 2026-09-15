@@ -12,9 +12,9 @@
     },
     "products": {
       ".read": "auth != null && root.child('users').child(auth.uid).child('active').val() === true",
-      ".write": "auth != null && root.child('users').child(auth.uid).child('active').val() === true",
       ".indexOn": ["sku", "barcode", "qrCode", "updatedAt"],
       "$productId": {
+        ".write": "auth != null && root.child('users').child(auth.uid).child('active').val() === true && (newData.exists() || (root.child('users').child(auth.uid).child('role').val() === 'owner' && data.exists() && data.child('stockQuantity').isNumber() && data.child('stockQuantity').val() === 0 && (!data.child('stockVersion').exists() || (data.child('stockVersion').isNumber() && data.child('stockVersion').val() === 0))))",
         ".validate": "!data.exists() ? (newData.exists() && newData.child('stockQuantity').isNumber() && newData.child('stockQuantity').val() === 0 && (!newData.child('stockVersion').exists() || (newData.child('stockVersion').isNumber() && newData.child('stockVersion').val() === 0))) : (newData.exists() && newData.child('stockQuantity').isNumber() && newData.child('stockQuantity').val() >= 0 && ((newData.child('stockQuantity').val() === data.child('stockQuantity').val() && ((!data.child('stockVersion').exists() && (!newData.child('stockVersion').exists() || newData.child('stockVersion').val() === 0)) || (data.child('stockVersion').isNumber() && newData.child('stockVersion').isNumber() && newData.child('stockVersion').val() === data.child('stockVersion').val()))) || (newData.child('stockQuantity').val() !== data.child('stockQuantity').val() && newData.child('stockVersion').isNumber() && newData.child('stockVersion').val() === (data.child('stockVersion').isNumber() ? data.child('stockVersion').val() + 1 : 1))))"
       }
     },
