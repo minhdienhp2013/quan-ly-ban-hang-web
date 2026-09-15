@@ -421,9 +421,9 @@ export default function StocktakePage() {
                 <input
                   key={`${product.id}-${quantity}`}
                   type="number"
-                  inputMode="decimal"
+                  inputMode="numeric"
                   min="0"
-                  step="0.001"
+                  step="1"
                   defaultValue={quantity}
                   aria-label={`Nhập số lượng thực tế ${product.name}`}
                   onBlur={(event) => changeManualQuantity(product.id, event.currentTarget.value)}
@@ -569,9 +569,9 @@ export default function StocktakePage() {
                           <input
                             className="inv-row-input"
                             type="number"
-                            inputMode="decimal"
+                            inputMode="numeric"
                             min="0"
-                            step="0.001"
+                            step="1"
                             placeholder="Chưa đếm"
                             value={
                               hasConfirmedCount(session.countsByProductId, product.id)
