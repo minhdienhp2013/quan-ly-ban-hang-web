@@ -18,6 +18,18 @@ export interface ProductReferenceSnapshots {
   stocktakes: unknown;
 }
 
+export interface ProductDeletionLock {
+  productId: string;
+  actorUid: string;
+  createdAt: number;
+}
+
+export interface StoredProductRecord {
+  storageKey: string;
+  storedId?: string;
+  product: Product;
+}
+
 export interface ProductPermanentDeleteBlocker {
   productId: string;
   sku: string;
@@ -28,7 +40,7 @@ export interface ProductPermanentDeleteBlocker {
 export interface ProductPermanentDeletePreflight {
   selected: number;
   canDeleteAll: boolean;
-  eligibleProducts: Product[];
+  eligibleProducts: StoredProductRecord[];
   blockers: ProductPermanentDeleteBlocker[];
 }
 
@@ -56,6 +68,28 @@ function stockMovementsReferenceProduct(collection: unknown, productId: string) 
   });
 }
 
+function readDeletionLock(locks: unknown, productId: string): ProductDeletionLock | null {
+  if (!locks || typeof locks !== 'object') return null;
+  const value = (locks as Record<string, unknown>)[productId];
+  if (!value || typeof value !== 'object') return null;
+  const candidate = value as Partial<ProductDeletionLock>;
+  if (candidate.productId !== productId || typeof candidate.actorUid !== 'string') return null;
+  return {
+    productId,
+    actorUid: candidate.actorUid,
+    createdAt: Number(candidate.createdAt) || 0,
+  };
+}
+
+export function toStoredProductRecord(storageKey: string, rawProduct: Product): StoredProductRecord {
+  const storedId = typeof rawProduct.id === 'string' && rawProduct.id ? rawProduct.id : undefined;
+  return {
+    storageKey,
+    ...(storedId ? { storedId } : {}),
+    product: { ...rawProduct, id: storageKey },
+  };
+}
+
 export function findProductPermanentDeleteReferenceNodes(
   productId: string,
   references: ProductReferenceSnapshots,
@@ -70,13 +104,20 @@ export function findProductPermanentDeleteReferenceNodes(
 }
 
 export function getProductPermanentDeleteReasons(
-  product: Product,
+  record: StoredProductRecord,
   references: ProductReferenceSnapshots,
+  deletionLocks: unknown,
+  allowedLockActorUid?: string,
 ): string[] {
   const reasons: string[] = [];
+  const { product, storageKey, storedId } = record;
+
+  if (storedId && storedId !== storageKey) {
+    reasons.push('Dữ liệu định danh sản phẩm không hợp lệ.');
+  }
 
   if (!Number.isFinite(product.stockQuantity) || product.stockQuantity !== 0) {
-    reasons.push(`Còn tồn kho (${product.stockQuantity}).`);
+    reasons.push(`Còn tồn kho (${String(product.stockQuantity)}).`);
   }
 
   const stockVersion = typeof product.stockVersion === 'undefined' ? 0 : product.stockVersion;
@@ -84,9 +125,14 @@ export function getProductPermanentDeleteReasons(
     reasons.push(`stockVersion phải bằng 0 nhưng hiện là ${String(product.stockVersion)}.`);
   }
 
-  const referenceNodes = findProductPermanentDeleteReferenceNodes(product.id, references);
+  const referenceNodes = findProductPermanentDeleteReferenceNodes(storageKey, references);
   if (referenceNodes.length > 0) {
     reasons.push(`Đã có lịch sử giao dịch (${referenceNodes.join(', ')}).`);
+  }
+
+  const lock = readDeletionLock(deletionLocks, storageKey);
+  if (lock && lock.actorUid !== allowedLockActorUid) {
+    reasons.push('Sản phẩm đang được khóa bởi một thao tác xóa khác.');
   }
 
   return reasons;
@@ -94,32 +140,39 @@ export function getProductPermanentDeleteReasons(
 
 export function buildProductPermanentDeletePreflight(
   selectedProducts: readonly Product[],
-  currentProducts: readonly Product[],
+  currentProducts: readonly StoredProductRecord[],
   references: ProductReferenceSnapshots,
+  deletionLocks: unknown = null,
+  allowedLockActorUid?: string,
 ): ProductPermanentDeletePreflight {
-  const currentById = new Map(currentProducts.map((product) => [product.id, product]));
+  const currentByStorageKey = new Map(currentProducts.map((record) => [record.storageKey, record]));
   const uniqueSelected = [...new Map(selectedProducts.map((product) => [product.id, product])).values()];
   const blockers: ProductPermanentDeleteBlocker[] = [];
-  const candidates: Product[] = [];
+  const candidates: StoredProductRecord[] = [];
 
   for (const selected of uniqueSelected) {
-    const current = currentById.get(selected.id);
+    const current = currentByStorageKey.get(selected.id);
     if (!current) {
       blockers.push({
         productId: selected.id,
         sku: selected.sku,
         name: selected.name,
-        reasons: ['Sản phẩm không còn tồn tại trong danh mục hiện tại.'],
+        reasons: ['Sản phẩm không còn tồn tại tại Firebase child key đã chọn.'],
       });
       continue;
     }
 
-    const reasons = getProductPermanentDeleteReasons(current, references);
+    const reasons = getProductPermanentDeleteReasons(
+      current,
+      references,
+      deletionLocks,
+      allowedLockActorUid,
+    );
     if (reasons.length > 0) {
       blockers.push({
-        productId: current.id,
-        sku: current.sku,
-        name: current.name,
+        productId: current.storageKey,
+        sku: current.product.sku,
+        name: current.product.name,
         reasons,
       });
       continue;
@@ -134,5 +187,22 @@ export function buildProductPermanentDeletePreflight(
     canDeleteAll,
     eligibleProducts: canDeleteAll ? candidates : [],
     blockers,
+  };
+}
+
+export function buildLockFailurePreflight(
+  source: ProductPermanentDeletePreflight,
+): ProductPermanentDeletePreflight {
+  if (source.blockers.length > 0) return source;
+  return {
+    selected: source.selected,
+    canDeleteAll: false,
+    eligibleProducts: [],
+    blockers: source.eligibleProducts.map((record) => ({
+      productId: record.storageKey,
+      sku: record.product.sku,
+      name: record.product.name,
+      reasons: ['Không thể khóa sản phẩm để xóa an toàn. Dữ liệu có thể vừa thay đổi; hãy thử lại.'],
+    })),
   };
 }
