@@ -1,7 +1,11 @@
 import type { Product } from '../../types/models';
 import { normalizeSearchCode } from '../../shared/search/searchNormalization';
-import { createProduct } from '../products/productService';
+import { createProduct, type ProductInput } from '../products/productService';
 import type { PurchaseExcelImportRow } from './purchaseExcelImport';
+import {
+  buildPurchaseExcelNewProductConsensus,
+  getPurchaseExcelCurrentCatalogConflict,
+} from './purchaseExcelImportNewProduct';
 
 export interface PurchaseExcelCreateProgress {
   createdProductsBySku: Record<string, Product>;
@@ -39,11 +43,15 @@ export async function createConfirmedPurchaseExcelProducts(input: {
   rows: readonly PurchaseExcelImportRow[];
   selectedNewRowNumbers: ReadonlySet<number>;
   actorUid: string;
+  currentProducts: readonly Product[];
   progress?: PurchaseExcelCreateProgress;
+  createProductFn?: (product: ProductInput, actorUid: string) => Promise<Product>;
 }): Promise<PurchaseExcelCreateResult> {
   const progress = cloneProgress(input.progress);
   const failures: PurchaseExcelCreateFailure[] = [];
   const groups = new Map<string, PurchaseExcelImportRow[]>();
+  const createProductNow = input.createProductFn ?? createProduct;
+  const currentCatalog = [...input.currentProducts, ...Object.values(progress.createdProductsBySku)];
 
   for (const row of input.rows) {
     if (row.status !== 'NEW' || !input.selectedNewRowNumbers.has(row.rowNumber)) continue;
@@ -56,15 +64,35 @@ export async function createConfirmedPurchaseExcelProducts(input: {
 
   for (const [key, group] of groups) {
     if (progress.createdProductsBySku[key]) continue;
-    const representative = group[0];
-    if (!representative?.newProductInput) continue;
+
+    const consensus = buildPurchaseExcelNewProductConsensus(group);
+    const sku = consensus.input?.sku ?? group[0]?.effectiveSku ?? key;
+    if (!consensus.input) {
+      failures.push({
+        sku,
+        rowNumbers: group.map((row) => row.rowNumber),
+        message: consensus.error ?? 'Metadata hàng mới không nhất quán. Hãy phân tích lại file.',
+      });
+      continue;
+    }
+
+    const catalogConflict = getPurchaseExcelCurrentCatalogConflict(consensus.input, currentCatalog);
+    if (catalogConflict) {
+      failures.push({
+        sku: consensus.input.sku,
+        rowNumbers: group.map((row) => row.rowNumber),
+        message: catalogConflict,
+      });
+      continue;
+    }
 
     try {
-      const created = await createProduct(representative.newProductInput, input.actorUid);
+      const created = await createProductNow(consensus.input, input.actorUid);
       progress.createdProductsBySku[key] = created;
+      currentCatalog.push(created);
     } catch (error) {
       failures.push({
-        sku: representative.effectiveSku ?? representative.newProductInput.sku,
+        sku: consensus.input.sku,
         rowNumbers: group.map((row) => row.rowNumber),
         message: messageOf(error),
       });
