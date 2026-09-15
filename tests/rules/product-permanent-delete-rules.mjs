@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { after, before, beforeEach, test } from 'node:test';
 import {
   assertFails,
@@ -11,6 +12,7 @@ const PROJECT_ID = 'demo-products-delete';
 const OWNER_UID = 'owner-test';
 const OWNER2_UID = 'owner-test-2';
 const STAFF_UID = 'staff-test';
+const RULES = readFileSync(new URL('../../database.rules.json', import.meta.url), 'utf8');
 let testEnv;
 
 function appUser(uid, role) {
@@ -59,7 +61,7 @@ function audit(id, actorUid = OWNER_UID) {
 before(async () => {
   testEnv = await initializeTestEnvironment({
     projectId: PROJECT_ID,
-    database: { host: '127.0.0.1', port: 9000 },
+    database: { host: '127.0.0.1', port: 9000, rules: RULES },
   });
 });
 
