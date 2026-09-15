@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
 import type { Product } from '../../types/models';
@@ -36,6 +36,8 @@ import {
 export default function ProductsPage() {
   const { appUser } = useAuth();
   const navigate = useNavigate();
+  const permanentDeleteButtonRef = useRef<HTMLButtonElement>(null);
+  const statusRef = useRef<HTMLParagraphElement>(null);
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -56,6 +58,7 @@ export default function ProductsPage() {
   const [bulkDeactivating, setBulkDeactivating] = useState(false);
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const [deleteBlockers, setDeleteBlockers] = useState<ProductPermanentDeleteBlocker[]>([]);
+  const [focusStatusAfterDelete, setFocusStatusAfterDelete] = useState(false);
 
   useEffect(() => {
     setLoading(true);
@@ -87,6 +90,12 @@ export default function ProductsPage() {
     });
     if (detailProductId && !productIds.has(detailProductId)) setDetailProductId(null);
   }, [products, detailProductId]);
+
+  useEffect(() => {
+    if (!focusStatusAfterDelete || !searchNotice) return;
+    statusRef.current?.focus();
+    setFocusStatusAfterDelete(false);
+  }, [focusStatusAfterDelete, searchNotice]);
 
   const filteredProducts = useMemo(
     () => filterGoodsProducts(products, query, activeFilter, stockFilter),
@@ -257,6 +266,7 @@ export default function ProductsPage() {
   async function handlePermanentDelete() {
     if (appUser?.role !== 'owner' || bulkDeleting || bulkDeactivating || selectedProducts.length === 0) return;
 
+    let deletedSuccessfully = false;
     setBulkDeleting(true);
     setSearchNotice(null);
     setLoadError(null);
@@ -278,7 +288,7 @@ export default function ProductsPage() {
       );
       if (!confirmed) return;
 
-      const result = await deleteProductsPermanently(preflight.eligibleProducts, appUser.uid);
+      const result = await deleteProductsPermanently(selectedProducts, appUser.uid);
       if (!result.preflight.canDeleteAll) {
         setDeleteBlockers(result.preflight.blockers);
         setSearchNotice(
@@ -288,13 +298,18 @@ export default function ProductsPage() {
         return;
       }
 
-      const deletedIds = new Set(result.preflight.eligibleProducts.map((product) => product.id));
+      const deletedIds = new Set(result.preflight.eligibleProducts.map((record) => record.storageKey));
       setSelectedProductIds((current) => new Set([...current].filter((id) => !deletedIds.has(id))));
       setSearchNotice(`Đã xóa vĩnh viễn ${result.deleted} sản phẩm.`);
+      setFocusStatusAfterDelete(true);
+      deletedSuccessfully = true;
     } catch (error) {
       setLoadError(error instanceof Error ? error.message : 'Không thể xóa vĩnh viễn các sản phẩm đã chọn.');
     } finally {
       setBulkDeleting(false);
+      if (!deletedSuccessfully) {
+        requestAnimationFrame(() => permanentDeleteButtonRef.current?.focus());
+      }
     }
   }
 
@@ -331,7 +346,7 @@ export default function ProductsPage() {
 
       <GoodsKpiBar stats={stats} />
 
-      {searchNotice ? <p className="goods-info" role="status">{searchNotice}</p> : null}
+      {searchNotice ? <p ref={statusRef} className="goods-info" role="status" tabIndex={-1}>{searchNotice}</p> : null}
       {loadError ? <p className="form-error" role="alert">{loadError}</p> : null}
 
       {importOpen && appUser ? (
@@ -379,6 +394,7 @@ export default function ProductsPage() {
             showPermanentDelete={appUser?.role === 'owner'}
             deactivating={bulkDeactivating}
             deleting={bulkDeleting}
+            permanentDeleteButtonRef={permanentDeleteButtonRef}
             onPrint={() => printProducts(selectedProducts)}
             onDeactivate={() => void handleBulkDeactivate()}
             onPermanentDelete={() => void handlePermanentDelete()}
@@ -389,7 +405,7 @@ export default function ProductsPage() {
           />
 
           {deleteBlockers.length > 0 ? (
-            <div className="form-error" role="alert" style={{ margin: 12, padding: 12, border: '1px solid #e6a2a2', borderRadius: 10, background: '#fff6f6' }}>
+            <div className="form-error goods-delete-blockers" role="alert">
               <strong>{deleteBlockers.length} sản phẩm không đủ điều kiện xóa. Không xóa sản phẩm nào.</strong>
               <ul>
                 {deleteBlockers.map((blocker) => (
