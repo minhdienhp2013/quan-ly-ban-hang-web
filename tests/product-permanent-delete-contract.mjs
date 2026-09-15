@@ -5,6 +5,7 @@ import {
   buildProductPermanentDeletePreflight,
   findProductPermanentDeleteReferenceNodes,
   PRODUCT_PERMANENT_DELETE_REFERENCE_NODES,
+  toStoredProductRecord,
 } from '../src/modules/products/productPermanentDelete.ts';
 
 const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
@@ -23,6 +24,10 @@ function product(overrides = {}) {
     updatedAt: 1,
     ...overrides,
   };
+}
+
+function record(storageKey, overrides = {}) {
+  return toStoredProductRecord(storageKey, product({ id: storageKey, ...overrides }));
 }
 
 function emptyReferences(overrides = {}) {
@@ -56,37 +61,46 @@ test('permanent delete traces the complete canonical Product reference set', () 
 });
 
 test('stock > 0 blocks permanent deletion', () => {
-  const p = product({ stockQuantity: 2 });
-  const result = buildProductPermanentDeletePreflight([p], [p], emptyReferences());
+  const selected = product({ stockQuantity: 2 });
+  const result = buildProductPermanentDeletePreflight([selected], [record('p1', { stockQuantity: 2 })], emptyReferences());
   assert.equal(result.canDeleteAll, false);
   assert.equal(result.eligibleProducts.length, 0);
   assert.match(result.blockers[0].reasons.join(' '), /Còn tồn kho/);
 });
 
 test('stockVersion > 0 blocks permanent deletion while legacy missing version is zero', () => {
-  const used = product({ stockVersion: 1 });
-  const usedResult = buildProductPermanentDeletePreflight([used], [used], emptyReferences());
+  const selected = product();
+  const usedResult = buildProductPermanentDeletePreflight(
+    [selected],
+    [record('p1', { stockVersion: 1 })],
+    emptyReferences(),
+  );
   assert.equal(usedResult.canDeleteAll, false);
   assert.match(usedResult.blockers[0].reasons.join(' '), /stockVersion/);
 
-  const legacy = product();
-  delete legacy.stockVersion;
-  const legacyResult = buildProductPermanentDeletePreflight([legacy], [legacy], emptyReferences());
+  const legacyProduct = product();
+  delete legacyProduct.stockVersion;
+  const legacyRecord = toStoredProductRecord('p1', legacyProduct);
+  const legacyResult = buildProductPermanentDeletePreflight([selected], [legacyRecord], emptyReferences());
   assert.equal(legacyResult.canDeleteAll, true);
 });
 
 test('any historical transaction/data reference blocks deletion', () => {
-  const p = product();
+  const selected = product();
   const cases = {
-    sales: { s1: { items: [{ productId: p.id }] } },
-    purchases: { p1: { items: [{ productId: p.id }] } },
-    stockOuts: { o1: { items: [{ productId: p.id }] } },
-    stockMovements: { m1: { productId: p.id } },
-    stocktakes: { t1: { items: [{ productId: p.id }] } },
+    sales: { s1: { items: [{ productId: 'p1' }] } },
+    purchases: { p1: { items: [{ productId: 'p1' }] } },
+    stockOuts: { o1: { items: [{ productId: 'p1' }] } },
+    stockMovements: { m1: { productId: 'p1' } },
+    stocktakes: { t1: { items: [{ productId: 'p1' }] } },
   };
 
   for (const [node, value] of Object.entries(cases)) {
-    const result = buildProductPermanentDeletePreflight([p], [p], emptyReferences({ [node]: value }));
+    const result = buildProductPermanentDeletePreflight(
+      [selected],
+      [record('p1')],
+      emptyReferences({ [node]: value }),
+    );
     assert.equal(result.canDeleteAll, false, `${node} must block`);
     assert.match(result.blockers[0].reasons.join(' '), /Đã có lịch sử giao dịch/);
   }
@@ -96,14 +110,43 @@ test('clean Product is deletable and mixed selection fails closed with delete NO
   const clean = product({ id: 'clean', sku: 'CLEAN' });
   const blocked = product({ id: 'blocked', sku: 'BLOCKED', stockQuantity: 1 });
 
-  const cleanResult = buildProductPermanentDeletePreflight([clean], [clean], emptyReferences());
+  const cleanResult = buildProductPermanentDeletePreflight([clean], [record('clean', { sku: 'CLEAN' })], emptyReferences());
   assert.equal(cleanResult.canDeleteAll, true);
-  assert.deepEqual(cleanResult.eligibleProducts.map((item) => item.id), ['clean']);
+  assert.deepEqual(cleanResult.eligibleProducts.map((item) => item.storageKey), ['clean']);
 
-  const mixed = buildProductPermanentDeletePreflight([clean, blocked], [clean, blocked], emptyReferences());
+  const mixed = buildProductPermanentDeletePreflight(
+    [clean, blocked],
+    [record('clean', { sku: 'CLEAN' }), record('blocked', { sku: 'BLOCKED', stockQuantity: 1 })],
+    emptyReferences(),
+  );
   assert.equal(mixed.canDeleteAll, false);
   assert.equal(mixed.blockers.length, 1);
   assert.equal(mixed.eligibleProducts.length, 0);
+});
+
+test('mismatched stored Product.id and Firebase child key fails closed', () => {
+  const selected = product({ id: 'A', sku: 'MALFORMED' });
+  const malformed = toStoredProductRecord('A', product({ id: 'B', sku: 'MALFORMED' }));
+  const result = buildProductPermanentDeletePreflight([selected], [malformed], emptyReferences());
+  assert.equal(result.canDeleteAll, false);
+  assert.match(result.blockers[0].reasons.join(' '), /Dữ liệu định danh sản phẩm không hợp lệ/);
+});
+
+test('foreign deletion lock blocks preflight while own lock is allowed for post-lock revalidation', () => {
+  const selected = product();
+  const locks = { p1: { productId: 'p1', actorUid: 'owner-a', createdAt: 1 } };
+  const blocked = buildProductPermanentDeletePreflight([selected], [record('p1')], emptyReferences(), locks);
+  assert.equal(blocked.canDeleteAll, false);
+  assert.match(blocked.blockers[0].reasons.join(' '), /khóa/);
+
+  const own = buildProductPermanentDeletePreflight(
+    [selected],
+    [record('p1')],
+    emptyReferences(),
+    locks,
+    'owner-a',
+  );
+  assert.equal(own.canDeleteAll, true);
 });
 
 test('owner-only bulk action, explicit confirmation and cancel-before-delete are wired in the Products page', () => {
@@ -133,18 +176,43 @@ test('preflight blockers are rendered with count, SKU/name and reasons', () => {
   assert.match(page, /blocker\.reasons\.join/);
 });
 
-test('delete service revalidates, deletes Products atomically with per-Product audit, and never cascades history', () => {
+test('delete service acquires all locks, revalidates under lock, atomically deletes by storageKey and cleans locks', () => {
   const service = read('src/modules/products/productService.ts');
   const start = service.indexOf('export async function deleteProductsPermanently');
   const body = service.slice(start);
   assert.match(body, /readPermanentDeletePreflight\(selectedProducts\)/);
-  assert.match(body, /if \(!preflight\.canDeleteAll\) return \{ deleted: 0, preflight \}/);
-  assert.match(body, /updates\[`products\/\$\{product\.id\}`\] = null/);
+  assert.match(body, /deletionLockUpdates/);
+  assert.match(body, /locksAcquired = true/);
+  assert.match(body, /readPermanentDeletePreflight\(selectedProducts, actorUid\)/);
+  assert.match(body, /const productKey = record\.storageKey/);
+  assert.match(body, /updates\[`products\/\$\{productKey\}`\] = null/);
+  assert.match(body, /updates\[`productDeletionLocks\/\$\{productKey\}`\] = null/);
   assert.match(body, /'PRODUCT_DELETED'/);
-  assert.match(body, /`Xóa vĩnh viễn sản phẩm \$\{product\.sku\} - \$\{product\.name\}`/);
-  assert.match(body, /updates\[`auditLogs\/\$\{auditKey\}`\] = audit/);
   assert.match(body, /await update\(ref\(database\), updates\)/);
+  assert.match(body, /onDisconnect/);
+  assert.match(body, /releaseDeletionLocks/);
   assert.doesNotMatch(body, /updates\[`(?:sales|purchases|stockOuts|stockMovements|stocktakes)\//);
+});
+
+test('focus stays deliberate for blocked/cancel/error and success moves to stable status', () => {
+  const page = read('src/modules/products/ProductsPage.tsx');
+  const bar = read('src/modules/products/GoodsBulkActionBar.tsx');
+  assert.match(bar, /aria-disabled=\{busy\}/);
+  assert.doesNotMatch(bar.slice(bar.indexOf('permanentDeleteButtonRef')), /disabled=\{busy\}/);
+  assert.match(page, /permanentDeleteButtonRef\.current\?\.focus\(\)/);
+  assert.match(page, /setFocusStatusAfterDelete\(true\)/);
+  assert.match(page, /statusRef\.current\?\.focus\(\)/);
+  assert.match(page, /tabIndex=\{-1\}/);
+});
+
+test('mobile Product cards keep the existing semantic checkbox usable at 320-430', () => {
+  const responsive = read('src/modules/products/GoodsResponsiveList.tsx');
+  assert.match(responsive, /type="checkbox"/);
+  assert.match(responsive, /onToggleProduct\(product\.id\)/);
+  assert.match(responsive, /display: 'flex'/);
+  assert.match(responsive, /width: 44/);
+  assert.match(responsive, /height: 44/);
+  assert.match(responsive, /gridTemplateColumns: 'auto minmax\(0,1fr\) auto'/);
 });
 
 test('Product create/edit/active semantics remain present and Inventory CAS remains protected', () => {
@@ -160,22 +228,34 @@ test('Product create/edit/active semantics remain present and Inventory CAS rema
   assert.match(inventory, /stockOperations\/\$\{operationId\}/);
 });
 
-test('Firebase Product rules preserve create/update/CAS and gate deletion to clean owner Products', () => {
-  const rules = JSON.parse(read('database.rules.json'));
-  const products = rules.rules.products;
-  assert.equal(products['.write'], undefined, 'parent .write must not bypass child delete guard');
-  const write = products.$productId['.write'];
-  const validate = products.$productId['.validate'];
+test('Firebase rules gate delete with own lock and block references/Product writes while locked', () => {
+  const rules = JSON.parse(read('database.rules.json')).rules;
+  const productWrite = rules.products.$productId['.write'];
+  const lockWrite = rules.productDeletionLocks.$productId['.write'];
+  assert.equal(rules.products['.write'], undefined);
+  assert.match(productWrite, /productDeletionLocks/);
+  assert.match(productWrite, /actorUid'\)\.val\(\) === auth\.uid/);
+  assert.match(productWrite, /stockQuantity/);
+  assert.match(productWrite, /stockVersion/);
+  assert.match(productWrite, /data\.child\('id'\)/);
+  assert.match(lockWrite, /!data\.exists\(\)/);
+  assert.match(lockWrite, /root\.child\('products'\)/);
+  assert.match(lockWrite, /data\.child\('id'\)/);
 
-  assert.match(write, /active/);
-  assert.match(write, /newData\.exists\(\)/, 'normal create/update remains allowed for active users');
-  assert.match(write, /role'\)\.val\(\) === 'owner'/, 'staff deletion must be rejected');
-  assert.match(write, /stockQuantity/);
-  assert.match(write, /\.val\(\) === 0/);
-  assert.match(write, /!data\.child\('stockVersion'\)\.exists\(\)/);
-  assert.match(write, /data\.child\('stockVersion'\)\.val\(\) === 0/);
+  for (const node of ['sales', 'purchases', 'stockOuts', 'stocktakes']) {
+    const validation = rules[node][`$${node === 'sales' ? 'saleId' : node === 'purchases' ? 'purchaseId' : node === 'stockOuts' ? 'stockOutId' : 'stocktakeId'}`].items.$itemId['.validate'];
+    assert.match(validation, /productDeletionLocks/);
+    assert.match(validation, /products/);
+  }
+  assert.match(rules.stockMovements.$movementId['.validate'], /productDeletionLocks/);
+});
 
-  assert.match(validate, /newData\.child\('stockQuantity'\)\.val\(\) === 0/);
-  assert.match(validate, /newData\.child\('stockVersion'\)\.val\(\) === data\.child\('stockVersion'\)\.val\(\)/);
-  assert.match(validate, /data\.child\('stockVersion'\)\.val\(\) \+ 1/);
+test('CI runs the actual Realtime Database Rules emulator suite', () => {
+  const workflow = read('.github/workflows/ci.yml');
+  const packageJson = JSON.parse(read('package.json'));
+  assert.match(workflow, /Realtime Database Rules Emulator Test/);
+  assert.match(workflow, /npm run test:rules/);
+  assert.equal(packageJson.devDependencies['@firebase/rules-unit-testing'], '5.0.2');
+  assert.equal(packageJson.devDependencies['firebase-tools'], '15.30.1');
+  assert.match(packageJson.scripts['test:rules'], /firebase emulators:exec --only database/);
 });
