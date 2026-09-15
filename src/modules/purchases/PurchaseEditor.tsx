@@ -3,6 +3,14 @@ import type { Product, Purchase, Supplier } from '../../types/models';
 import BarcodeScanner from '../qr/BarcodeScanner';
 import { findProductByScannedCode } from '../qr/productLookup';
 import '../qr/qrPrinting.css';
+import {
+  PURCHASE_DRAFT_VERSION,
+  clearPurchaseDraft,
+  isMeaningfulPurchaseDraft,
+  savePurchaseDraft,
+  type PurchaseDraft,
+  type PurchaseDraftLine,
+} from './purchaseDraft';
 import PurchaseProductPicker from './PurchaseProductPicker';
 import PurchaseQuickAddProduct from './PurchaseQuickAddProduct';
 import type { CreatePurchaseInput } from './purchaseService';
@@ -21,6 +29,7 @@ interface PurchaseEditorProps {
   suppliers: readonly Supplier[];
   actorUid: string;
   sourcePurchase?: Purchase | null;
+  initialDraft?: PurchaseDraft | null;
   busy: boolean;
   onClose: () => void;
   onSubmit: (input: CreatePurchaseInput) => Promise<void>;
@@ -29,6 +38,7 @@ interface PurchaseEditorProps {
 interface QuickAddTarget {
   lineKey: string;
   initialName: string;
+  opener: HTMLButtonElement;
 }
 
 let editorLineSequence = 0;
@@ -41,7 +51,19 @@ function emptyLine(): EditorLine {
   return { key: nextLineKey(), productId: '', quantity: 1, unitCost: 0 };
 }
 
-function initialLines(source?: Purchase | null): EditorLine[] {
+function draftLineToEditorLine(line: PurchaseDraftLine): EditorLine {
+  return {
+    key: nextLineKey(),
+    productId: line.productId,
+    quantity: line.quantity,
+    unitCost: line.unitCost,
+    ...(line.historicalSku ? { historicalSku: line.historicalSku } : {}),
+    ...(line.historicalName ? { historicalName: line.historicalName } : {}),
+  };
+}
+
+function initialLines(source?: Purchase | null, draft?: PurchaseDraft | null): EditorLine[] {
+  if (draft?.lines.length) return draft.lines.map(draftLineToEditorLine);
   if (!source || !Array.isArray(source.items) || source.items.length === 0) return [emptyLine()];
   return source.items.map((item) => ({
     key: nextLineKey(),
@@ -62,10 +84,12 @@ export default function PurchaseEditor({
   suppliers,
   actorUid,
   sourcePurchase,
+  initialDraft,
   busy,
   onClose,
   onSubmit,
 }: PurchaseEditorProps) {
+  const restoredDraft = sourcePurchase ? null : initialDraft;
   const [createdProducts, setCreatedProducts] = useState<Product[]>([]);
   const availableProducts = useMemo(() => {
     const byId = new Map(products.map((product) => [product.id, product]));
@@ -79,10 +103,10 @@ export default function PurchaseEditor({
   const copiedSupplier = sourcePurchase?.supplierId
     ? activeSuppliers.find((supplier) => supplier.id === sourcePurchase.supplierId)
     : undefined;
-  const [supplierId, setSupplierId] = useState(copiedSupplier?.id || '');
-  const [supplierName, setSupplierName] = useState(sourcePurchase?.supplierName || copiedSupplier?.name || '');
-  const [note, setNote] = useState(sourcePurchase?.note || '');
-  const [lines, setLines] = useState<EditorLine[]>(() => initialLines(sourcePurchase));
+  const [supplierId, setSupplierId] = useState(restoredDraft?.supplierId ?? copiedSupplier?.id ?? '');
+  const [supplierName, setSupplierName] = useState(restoredDraft?.supplierName ?? sourcePurchase?.supplierName ?? copiedSupplier?.name ?? '');
+  const [note, setNote] = useState(restoredDraft?.note ?? sourcePurchase?.note ?? '');
+  const [lines, setLines] = useState<EditorLine[]>(() => initialLines(sourcePurchase, restoredDraft));
   const [error, setError] = useState('');
   const [scanTargetLineKey, setScanTargetLineKey] = useState<string | null>(null);
   const [scanError, setScanError] = useState('');
@@ -97,16 +121,33 @@ export default function PurchaseEditor({
   }, [products, createdProducts.length]);
 
   useEffect(() => {
-    if (!scanTargetLineKey && !quickAddTarget) return undefined;
+    if (!scanTargetLineKey) return undefined;
     const frame = requestAnimationFrame(() => {
       contextPanelRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
     });
     return () => cancelAnimationFrame(frame);
-  }, [scanTargetLineKey, quickAddTarget]);
+  }, [scanTargetLineKey]);
 
   const activeProductById = useMemo(() => new Map(activeProducts.map((product) => [product.id, product])), [activeProducts]);
   const unavailableLines = lines.filter((line) => line.productId && !activeProductById.has(line.productId));
   const total = lines.reduce((sum, line) => sum + (Number(line.quantity) || 0) * (Number(line.unitCost) || 0), 0);
+  const currentDraft = useMemo<PurchaseDraft>(() => ({
+    version: PURCHASE_DRAFT_VERSION,
+    supplierId,
+    supplierName,
+    note,
+    lines: lines.map((line) => ({
+      productId: line.productId,
+      quantity: line.quantity,
+      unitCost: line.unitCost,
+      ...(line.historicalSku ? { historicalSku: line.historicalSku } : {}),
+      ...(line.historicalName ? { historicalName: line.historicalName } : {}),
+    })),
+  }), [supplierId, supplierName, note, lines]);
+
+  useEffect(() => {
+    savePurchaseDraft(actorUid, currentDraft);
+  }, [actorUid, currentDraft]);
 
   function patchLine(lineKey: string, patch: Partial<EditorLine>) {
     setLines((current) => current.map((line) => line.key === lineKey ? { ...line, ...patch } : line));
@@ -162,18 +203,31 @@ export default function PurchaseEditor({
     setScanError('');
   }
 
-  function openQuickAdd(lineKey: string, query: string) {
+  function openQuickAdd(lineKey: string, query: string, opener: HTMLButtonElement) {
     setScanTargetLineKey(null);
     setScanError('');
-    setQuickAddTarget({ lineKey, initialName: query.trim() });
+    setQuickAddTarget({ lineKey, initialName: query.trim(), opener });
+  }
+
+  function closeQuickAdd(restoreFocus: boolean) {
+    const opener = quickAddTarget?.opener;
+    setQuickAddTarget(null);
+    if (restoreFocus && opener?.isConnected) requestAnimationFrame(() => opener.focus());
   }
 
   function handleQuickProductCreated(product: Product) {
     if (!quickAddTarget) return;
     const targetLineKey = quickAddTarget.lineKey;
     setCreatedProducts((current) => current.some((item) => item.id === product.id) ? current : [...current, product]);
-    selectProduct(targetLineKey, product);
     setQuickAddTarget(null);
+    selectProduct(targetLineKey, product);
+  }
+
+  function requestCloseEditor() {
+    if (busy) return;
+    if (isMeaningfulPurchaseDraft(currentDraft) && !window.confirm('Bỏ phiếu nhập đang soạn?')) return;
+    clearPurchaseDraft(actorUid);
+    onClose();
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -202,11 +256,11 @@ export default function PurchaseEditor({
     <section className="purchase-editor" aria-labelledby="purchase-editor-title">
       <div className="purchase-editor-heading">
         <div>
-          <p className="eyebrow">{sourcePurchase ? 'Sao chép thành phiếu mới' : 'Phiếu nhập mới'}</p>
+          <p className="eyebrow">{sourcePurchase ? 'Sao chép thành phiếu mới' : restoredDraft ? 'Khôi phục phiếu đang soạn' : 'Phiếu nhập mới'}</p>
           <h2 id="purchase-editor-title">{sourcePurchase ? 'Sao chép để sửa' : 'Nhập hàng'}</h2>
-          <p className="muted">{sourcePurchase ? `Dữ liệu được sao chép từ ${sourcePurchase.code}. Chưa có gì được ghi vào kho cho tới khi hoàn tất.` : 'Phiếu chỉ được ghi vào Firebase và tăng tồn khi bấm Hoàn tất nhập hàng.'}</p>
+          <p className="muted">{sourcePurchase ? `Dữ liệu được sao chép từ ${sourcePurchase.code}. Chưa có gì được ghi vào kho cho tới khi hoàn tất.` : restoredDraft ? 'Phiếu đang soạn đã được khôi phục từ phiên làm việc này. Chưa có thay đổi tồn kho.' : 'Phiếu chỉ được ghi vào Firebase và tăng tồn khi bấm Hoàn tất nhập hàng.'}</p>
         </div>
-        <button className="button button--secondary purchase-touch" type="button" onClick={onClose} disabled={busy}>Đóng</button>
+        <button className="button button--secondary purchase-touch" type="button" onClick={requestCloseEditor} disabled={busy}>Đóng</button>
       </div>
 
       <form onSubmit={(event) => void handleSubmit(event)}>
@@ -228,7 +282,7 @@ export default function PurchaseEditor({
         </div>
 
         {unavailableLines.length > 0 ? (
-          <p className="purchase-editor-warning" role="alert">Có {unavailableLines.length} dòng từ phiếu cũ chứa sản phẩm đã ngừng sử dụng hoặc không còn trong danh mục. Hãy xử lý các dòng này trước khi hoàn tất.</p>
+          <p className="purchase-editor-warning" role="alert">Có {unavailableLines.length} dòng từ phiếu cũ hoặc draft chứa sản phẩm đã ngừng sử dụng hoặc không còn trong danh mục. Hãy xử lý các dòng này trước khi hoàn tất.</p>
         ) : null}
 
         <div className="purchase-editor-lines" aria-label="Danh sách sản phẩm nhập">
@@ -272,18 +326,6 @@ export default function PurchaseEditor({
                     </section>
                   </div>
                 ) : null}
-
-                {quickAddTarget?.lineKey === line.key ? (
-                  <div className="purchase-editor-context-panel" ref={contextPanelRef}>
-                    <PurchaseQuickAddProduct
-                      products={availableProducts}
-                      actorUid={actorUid}
-                      initialName={quickAddTarget.initialName}
-                      onCreated={handleQuickProductCreated}
-                      onClose={() => setQuickAddTarget(null)}
-                    />
-                  </div>
-                ) : null}
               </Fragment>
             );
           })}
@@ -298,10 +340,20 @@ export default function PurchaseEditor({
 
         {error ? <p className="form-error" role="alert">{error}</p> : null}
         <div className="purchase-editor-actions">
-          <button className="button button--secondary purchase-touch" type="button" onClick={onClose} disabled={busy}>Hủy soạn</button>
+          <button className="button button--secondary purchase-touch" type="button" onClick={requestCloseEditor} disabled={busy}>Hủy soạn</button>
           <button className="button button--primary purchase-touch" type="submit" disabled={busy || unavailableLines.length > 0}>{busy ? 'Đang hoàn tất...' : 'Hoàn tất nhập hàng'}</button>
         </div>
       </form>
+
+      {quickAddTarget ? (
+        <PurchaseQuickAddProduct
+          products={availableProducts}
+          actorUid={actorUid}
+          initialName={quickAddTarget.initialName}
+          onCreated={handleQuickProductCreated}
+          onClose={() => closeQuickAdd(true)}
+        />
+      ) : null}
     </section>
   );
 }
