@@ -227,11 +227,11 @@ test('UX blocker regression: mobile chevron stays in card grid and long SKU wrap
   assert.match(css, /\.purchase-detail-mobile-items article>div strong\{min-width:0;overflow-wrap:anywhere\}/);
 });
 
-test('UX blocker regression: editor leaves unsafe five-column minimum layout by 1100px', () => {
+test('UX blocker regression: editor keeps Product full-width and all four value columns by 1100px', () => {
   const css = fs.readFileSync('src/modules/purchases/purchases.css', 'utf8');
   const tablet = css.slice(css.indexOf('@media(max-width:1100px)'), css.indexOf('@media(max-width:900px)'));
   assert.match(tablet, /\.purchase-editor-line--header\{display:none\}/);
-  assert.match(tablet, /\.purchase-editor-line\{grid-template-columns:minmax\(0,1fr\) minmax\(110px,.45fr\) minmax\(125px,.5fr\) 44px\}/);
+  assert.match(tablet, /\.purchase-editor-line\{grid-template-columns:minmax\(95px,.45fr\) minmax\(115px,.5fr\) minmax\(115px,.5fr\) minmax\(125px,.55fr\) 44px\}/);
   assert.match(tablet, /\.purchase-editor-line>label:first-child\{grid-column:1\/-1\}/);
   assert.match(tablet, /\.purchase-mobile-label\{display:block/);
   assert.doesNotMatch(tablet, /minmax\(200px|100px 120px 130px 40px/);
