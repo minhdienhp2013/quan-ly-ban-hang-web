@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState, type ChangeEvent } from 'react';
-import type { Product } from '../../types/models';
+import type { Product, Supplier } from '../../types/models';
 import type { PurchaseDraft } from './purchaseDraft';
 import {
   parsePurchaseExcelFile,
@@ -17,6 +17,7 @@ import {
 
 interface PurchaseExcelImportPanelProps {
   products: readonly Product[];
+  suppliers: readonly Supplier[];
   actorUid: string;
   onClose: () => void;
   onReady: (draft: PurchaseDraft, createdProducts: Product[]) => void;
@@ -37,6 +38,7 @@ function formatNumber(value: number | null | undefined) {
 
 export default function PurchaseExcelImportPanel({
   products,
+  suppliers,
   actorUid,
   onClose,
   onReady,
@@ -50,9 +52,12 @@ export default function PurchaseExcelImportPanel({
   const [reading, setReading] = useState(false);
   const [creatingProducts, setCreatingProducts] = useState(false);
   const [productsConfirmed, setProductsConfirmed] = useState(false);
+  const [supplierId, setSupplierId] = useState('');
+  const [supplierName, setSupplierName] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
+  const activeSuppliers = useMemo(() => suppliers.filter((supplier) => supplier.active), [suppliers]);
   const blockingCount = (preview?.summary.review ?? 0) + (preview?.summary.error ?? 0);
   const selectedNewCount = useMemo(
     () => preview?.rows.filter((row) => row.status === 'NEW' && selectedNewRows.has(row.rowNumber)).length ?? 0,
@@ -104,6 +109,12 @@ export default function PurchaseExcelImportPanel({
     if (!preview || productsConfirmed || creatingProducts) return;
     const all = preview.rows.filter((row) => row.status === 'NEW').map((row) => row.rowNumber);
     setSelectedNewRows((current) => current.size === all.length ? new Set() : new Set(all));
+  }
+
+  function handleSupplierChange(nextId: string) {
+    const supplier = activeSuppliers.find((item) => item.id === nextId);
+    setSupplierId(nextId);
+    if (supplier) setSupplierName(supplier.name);
   }
 
   async function confirmNewProducts() {
@@ -169,6 +180,8 @@ export default function PurchaseExcelImportPanel({
         rows: preview.rows,
         selectedNewRowNumbers: selectedNewRows,
         progress,
+        supplierId,
+        supplierName,
       });
       onReady(draft, Object.values(progress.createdProductsBySku));
     } catch (cause) {
@@ -289,6 +302,18 @@ export default function PurchaseExcelImportPanel({
               Có {blockingCount} dòng Cần kiểm tra/Lỗi. Import bị chặn để tránh ghép nhầm Product hoặc mất identifier.
             </p>
           ) : null}
+
+          <div className="purchase-import-supplier-grid">
+            <label>Nhà cung cấp
+              <select value={supplierId} onChange={(event) => handleSupplierChange(event.target.value)} disabled={creatingProducts}>
+                <option value="">— Chưa chọn danh mục —</option>
+                {activeSuppliers.map((supplier) => <option key={supplier.id} value={supplier.id}>{supplier.code} - {supplier.name}</option>)}
+              </select>
+            </label>
+            <label>Tên NCC trên phiếu
+              <input value={supplierName} onChange={(event) => setSupplierName(event.target.value)} placeholder="Tên nhà cung cấp" disabled={creatingProducts} />
+            </label>
+          </div>
 
           <div className="purchase-import-actions">
             <button className="button button--secondary purchase-touch" type="button" onClick={() => fileInputRef.current?.click()} disabled={reading || creatingProducts}>Chọn file khác</button>
