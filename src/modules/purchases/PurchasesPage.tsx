@@ -341,7 +341,7 @@ export default function PurchasesPage() {
         <main className="purchase-main">
           <PurchaseToolbar query={query} filtersOpen={filtersOpen} activeFilterCount={activeFilterCount} importDisabled={productsLoadState !== 'ready'} exportDisabled={loading || hasLoadError} onQueryChange={(value) => { setQuery(value); setNotice(null); }} onToggleFilters={() => setFiltersOpen((current) => !current)} onImport={openImport} onCreate={() => openCreate()} onExport={handleExportList} />
 
-          {importOpen && appUser ? <PurchaseExcelImportPanel products={availableProducts} actorUid={appUser.uid} onClose={() => setImportOpen(false)} onReady={handleImportReady} /> : null}
+          {importOpen && appUser ? <PurchaseExcelImportPanel products={availableProducts} suppliers={suppliers} actorUid={appUser.uid} onClose={() => setImportOpen(false)} onReady={handleImportReady} /> : null}
 
           {editorSession ? <PurchaseEditor key={editorSession.key} products={availableProducts} suppliers={suppliers} actorUid={appUser?.uid ?? ''} sourcePurchase={editorSession.source} initialDraft={editorSession.draft} busy={creating} onClose={() => { if (!creating) setEditorSession(null); }} onSubmit={handleCreate} /> : null}
 
