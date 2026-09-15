@@ -76,10 +76,31 @@ test('POS reuses shared ranked Product search and shared camera scanner lookup',
   assert.match(page, /<BarcodeScanner onScan=\{\(result\) => handleCameraScan\(result\.value\)\} \/>/);
 });
 
-test('cart keeps existing quantity and stock-safe Sale contracts', () => {
+test('cart preserves fractional direct quantity entry and stock-safe Sale contracts', () => {
   const page = read('src/modules/sales/SalesPage.tsx');
   const service = read('src/modules/sales/salesService.ts');
-  assert.match(page, /className="sales-qty-control"[\s\S]*?type="number"[\s\S]*?inputMode="numeric"[\s\S]*?min="1"[\s\S]*?step="1"/);
+  const quantityStart = page.indexOf('className="sales-qty-control"');
+  const quantityEnd = page.indexOf('</div>', quantityStart);
+  const quantityBlock = page.slice(quantityStart, quantityEnd);
+
+  assert.ok(quantityStart >= 0 && quantityEnd > quantityStart, 'sales quantity control not found');
+  assert.match(quantityBlock, /type="number"/);
+  assert.match(quantityBlock, /inputMode="decimal"/);
+  assert.match(quantityBlock, /min="0\.001"/);
+  assert.match(quantityBlock, /step="0\.001"/);
+  assert.match(quantityBlock, /valueAsNumber/);
+
+  const min = 0.001;
+  const step = 0.001;
+  for (const value of [0.5, 1.25, 2.75]) {
+    assert.ok(value >= min, `${value} must be above the UI minimum`);
+    const stepUnits = (value - min) / step;
+    assert.ok(Math.abs(stepUnits - Math.round(stepUnits)) < 1e-9, `${value} must align to 3-decimal UI precision`);
+  }
+
+  assert.match(page, /Math\.round\(value \* 1000\) \/ 1000/);
+  assert.match(page, /if \(quantity <= 0\)/);
+  assert.doesNotMatch(quantityBlock, /inputMode="numeric"[\s\S]*?min="1"[\s\S]*?step="1"/);
   assert.match(page, /setLineQuantity\(product, line\.quantity - 1\)/);
   assert.match(page, /setLineQuantity\(product, line\.quantity \+ 1\)/);
   assert.match(service, /commitStockOperation\(\{/);
