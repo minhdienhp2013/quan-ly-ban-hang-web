@@ -104,6 +104,8 @@ export default function SalesPage() {
   const { appUser } = useAuth();
   const initialDraft = useMemo(() => readSavedDraft(), []);
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const scanToggleRef = useRef<HTMLButtonElement>(null);
+  const historyBackButtonRef = useRef<HTMLButtonElement>(null);
   const [view, setView] = useState<'pos' | 'history'>('pos');
   const [products, setProducts] = useState<Product[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -314,6 +316,25 @@ export default function SalesPage() {
     requestAnimationFrame(() => searchInputRef.current?.focus());
   }
 
+  function toggleScanner() {
+    if (scannerOpen) {
+      setScannerOpen(false);
+      requestAnimationFrame(() => scanToggleRef.current?.focus());
+      return;
+    }
+    setScannerOpen(true);
+  }
+
+  function openHistory() {
+    setView('history');
+    requestAnimationFrame(() => historyBackButtonRef.current?.focus());
+  }
+
+  function returnToPos() {
+    setView('pos');
+    requestAnimationFrame(() => searchInputRef.current?.focus());
+  }
+
   function handleCameraScan(value: string) {
     const match = findProductByScannedCode(activeProducts, value);
     if (!match) {
@@ -393,7 +414,14 @@ export default function SalesPage() {
     return (
       <div className="sales-shell">
         <div className="sales-history-backbar">
-          <button className="sales-secondary-button" type="button" onClick={() => setView('pos')}>← Quay lại POS</button>
+          <button
+            ref={historyBackButtonRef}
+            className="sales-secondary-button"
+            type="button"
+            onClick={returnToPos}
+          >
+            ← Quay lại POS
+          </button>
         </div>
         <SaleHistoryPage />
       </div>
@@ -432,10 +460,11 @@ export default function SalesPage() {
             ) : null}
           </div>
           <button
+            ref={scanToggleRef}
             className={`sales-scan-button${scannerOpen ? ' is-active' : ''}`}
             type="button"
             aria-expanded={scannerOpen}
-            onClick={() => setScannerOpen((current) => !current)}
+            onClick={toggleScanner}
           >
             <span aria-hidden="true">▦</span>
             <strong>Quét mã</strong>
@@ -727,7 +756,7 @@ export default function SalesPage() {
             <span className="sales-recent-icon" aria-hidden="true">◷</span>
             <h2 id="sales-recent-heading">Lịch sử giao dịch <small>(4 gần nhất)</small></h2>
           </div>
-          <button type="button" onClick={() => setView('history')}>Xem toàn bộ</button>
+          <button type="button" onClick={openHistory}>Xem toàn bộ</button>
         </div>
 
         {recentError ? <div className="sales-error" role="alert"><span>{recentError}</span></div> : null}
