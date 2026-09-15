@@ -95,11 +95,11 @@
   color: #fff;
 }
 
-.danger-zone__button:hover:not(:disabled) {
+.danger-zone__button:hover:not([aria-disabled='true']) {
   background: #8f1c14;
 }
 
-.danger-zone__button:disabled {
+.danger-zone__button[aria-disabled='true'] {
   opacity: 0.55;
   cursor: not-allowed;
 }
