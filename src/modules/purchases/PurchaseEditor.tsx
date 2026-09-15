@@ -20,6 +20,7 @@ interface EditorLine {
   productId: string;
   quantity: number;
   unitCost: number;
+  salePrice?: number;
   historicalSku?: string;
   historicalName?: string;
 }
@@ -57,6 +58,7 @@ function draftLineToEditorLine(line: PurchaseDraftLine): EditorLine {
     productId: line.productId,
     quantity: line.quantity,
     unitCost: line.unitCost,
+    ...(typeof line.salePrice === 'number' ? { salePrice: line.salePrice } : {}),
     ...(line.historicalSku ? { historicalSku: line.historicalSku } : {}),
     ...(line.historicalName ? { historicalName: line.historicalName } : {}),
   };
@@ -129,6 +131,21 @@ export default function PurchaseEditor({
   }, [scanTargetLineKey]);
 
   const activeProductById = useMemo(() => new Map(activeProducts.map((product) => [product.id, product])), [activeProducts]);
+
+  useEffect(() => {
+    setLines((current) => {
+      let changed = false;
+      const next = current.map((line) => {
+        if (typeof line.salePrice === 'number' || !line.productId) return line;
+        const product = activeProductById.get(line.productId);
+        if (!product) return line;
+        changed = true;
+        return { ...line, salePrice: product.salePrice };
+      });
+      return changed ? next : current;
+    });
+  }, [activeProductById]);
+
   const unavailableLines = lines.filter((line) => line.productId && !activeProductById.has(line.productId));
   const total = lines.reduce((sum, line) => sum + (Number(line.quantity) || 0) * (Number(line.unitCost) || 0), 0);
   const currentDraft = useMemo<PurchaseDraft>(() => ({
@@ -140,6 +157,7 @@ export default function PurchaseEditor({
       productId: line.productId,
       quantity: line.quantity,
       unitCost: line.unitCost,
+      ...(typeof line.salePrice === 'number' ? { salePrice: line.salePrice } : {}),
       ...(line.historicalSku ? { historicalSku: line.historicalSku } : {}),
       ...(line.historicalName ? { historicalName: line.historicalName } : {}),
     })),
@@ -161,6 +179,7 @@ export default function PurchaseEditor({
     patchLine(lineKey, {
       productId: product.id,
       unitCost: product.costPrice,
+      salePrice: product.salePrice,
       historicalSku: undefined,
       historicalName: undefined,
     });
@@ -240,9 +259,19 @@ export default function PurchaseEditor({
       return;
     }
 
+    if (lines.some((line) => typeof line.salePrice !== 'number' || !Number.isFinite(line.salePrice) || line.salePrice < 0)) {
+      setError('Giá bán không hợp lệ.');
+      return;
+    }
+
     try {
       await onSubmit({
-        items: lines.map((line) => ({ productId: line.productId, quantity: line.quantity, unitCost: line.unitCost })),
+        items: lines.map((line) => ({
+          productId: line.productId,
+          quantity: line.quantity,
+          unitCost: line.unitCost,
+          salePrice: line.salePrice as number,
+        })),
         ...(supplierId ? { supplierId } : {}),
         ...(supplierName.trim() ? { supplierName: supplierName.trim() } : {}),
         ...(note.trim() ? { note: note.trim() } : {}),
@@ -286,7 +315,7 @@ export default function PurchaseEditor({
         ) : null}
 
         <div className="purchase-editor-lines" aria-label="Danh sách sản phẩm nhập">
-          <div className="purchase-editor-line purchase-editor-line--header" aria-hidden="true"><span>Sản phẩm</span><span>Số lượng</span><span>Giá nhập</span><span>Thành tiền</span><span /></div>
+          <div className="purchase-editor-line purchase-editor-line--header" aria-hidden="true"><span>Sản phẩm</span><span>Số lượng</span><span>Giá nhập</span><span>Giá bán</span><span>Thành tiền</span><span /></div>
           {lines.map((line, index) => {
             const activeProduct = activeProductById.get(line.productId);
             const unavailable = Boolean(line.productId && !activeProduct);
@@ -303,13 +332,14 @@ export default function PurchaseEditor({
                       historicalName={line.historicalName}
                       disabled={busy}
                       onSelect={(product) => selectProduct(line.key, product)}
-                      onClearSelection={() => patchLine(line.key, { productId: '', historicalSku: undefined, historicalName: undefined })}
+                      onClearSelection={() => patchLine(line.key, { productId: '', salePrice: undefined, historicalSku: undefined, historicalName: undefined })}
                       onScanRequest={openScanner}
                       onQuickAddRequest={openQuickAdd}
                     />
                   </div>
                   <label><span className="purchase-mobile-label">Số lượng</span><input ref={(node) => { if (node) quantityInputRefs.current.set(line.key, node); else quantityInputRefs.current.delete(line.key); }} type="number" inputMode="decimal" min="0.001" step="0.001" value={line.quantity} onChange={(event) => patchLine(line.key, { quantity: Number(event.target.value) })} /></label>
                   <label><span className="purchase-mobile-label">Giá nhập</span><input type="number" inputMode="numeric" min="0" step="1" value={line.unitCost} onChange={(event) => patchLine(line.key, { unitCost: Number(event.target.value) })} /></label>
+                  <label><span className="purchase-mobile-label">Giá bán</span><input type="number" inputMode="numeric" min="0" step="1" value={line.salePrice ?? ''} onChange={(event) => patchLine(line.key, { salePrice: Number(event.target.value) })} /></label>
                   <strong className="purchase-editor-line-total">{money(line.quantity * line.unitCost)} đ</strong>
                   <button className="purchase-editor-remove" type="button" onClick={() => removeLine(line.key)} disabled={busy || lines.length === 1} aria-label={`Xóa dòng ${index + 1}`}>×</button>
                 </div>
