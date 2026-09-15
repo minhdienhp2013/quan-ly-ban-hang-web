@@ -36,14 +36,15 @@ test('all interactive type=number surfaces are audited by the global numeric-ste
   ]);
 });
 
-test('product transaction quantities use native step 1 while stocktake keeps zero valid', () => {
+test('transaction quantity inputs keep their module-specific precision contracts', () => {
   const purchase = read('src/modules/purchases/PurchaseEditor.tsx');
   const sales = read('src/modules/sales/SalesPage.tsx');
   const stockout = read('src/modules/stockout/StockOutPage.tsx');
   const stocktake = read('src/modules/stocktake/StocktakePage.tsx');
 
   assert.match(purchase, /inputMode="numeric" min="1" step="1" value=\{line\.quantity\}/);
-  assert.match(sales, /className="sales-qty-control"[\s\S]*?<input[\s\S]*?type="number"[\s\S]*?min="1"[\s\S]*?step="1"/);
+  assert.match(sales, /className="sales-qty-control"[\s\S]*?<input[\s\S]*?type="number"[\s\S]*?inputMode="decimal"[\s\S]*?min="0\.001"[\s\S]*?step="0\.001"/);
+  assert.doesNotMatch(sales, /className="sales-qty-control"[\s\S]*?<input[\s\S]*?inputMode="numeric"[\s\S]*?min="1"[\s\S]*?step="1"/);
   assert.match(stockout, /Số lượng<input type="number" inputMode="numeric" min="1" step="1"/);
   assert.equal((stocktake.match(/type="number"\s+inputMode="numeric"\s+min="0"\s+step="1"/g) ?? []).length, 2);
 });

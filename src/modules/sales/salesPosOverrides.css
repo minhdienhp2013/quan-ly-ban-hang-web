@@ -1,0 +1,48 @@
+.sales-discount-field .vnd-money-input {
+  gap: 5px;
+}
+
+.sales-discount-field .sales-discount-label {
+  color: #586a84;
+  font-size: 0.82rem;
+  font-weight: 500;
+}
+
+.sales-discount-field .vnd-money-input__field {
+  min-height: 44px;
+  border: 1px solid #cbd9ea;
+  border-radius: 9px;
+  background: #fff;
+  padding: 5px 8px;
+  color: #132846;
+  font-weight: 800;
+}
+
+.sales-discount-field .vnd-money-input__steps {
+  display: none;
+}
+
+.sales-error button,
+.sales-recent-header > button,
+.sales-remove-line {
+  min-width: 44px;
+  min-height: 44px;
+}
+
+.sales-remove-line {
+  width: 44px;
+  height: 44px;
+  box-sizing: border-box;
+}
+
+@media (max-width: 560px) {
+  .sales-discount-field .sales-discount-label {
+    font-size: 0.73rem;
+  }
+}
+
+@media (max-width: 340px) {
+  .sales-discount-field .sales-discount-label {
+    font-size: 0.66rem;
+  }
+}
