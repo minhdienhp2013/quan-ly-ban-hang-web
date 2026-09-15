@@ -6,11 +6,13 @@ import {
   PURCHASE_DRAFT_VERSION,
   clearPurchaseDraft,
   getPurchaseDraftKey,
+  guardPurchaseDraftReplacement,
   isMeaningfulPurchaseDraft,
   loadPurchaseDraft,
   parsePurchaseDraft,
   savePurchaseDraft,
 } from '../src/modules/purchases/purchaseDraft.ts';
+import { resolvePurchaseModalFocusTarget } from '../src/modules/purchases/purchaseModalFocus.ts';
 import {
   createProductFormState,
   getProductFormValidationError,
@@ -19,9 +21,13 @@ import {
 
 class MemoryStorage {
   #data = new Map();
+  constructor(trace = null) { this.trace = trace; }
   getItem(key) { return this.#data.has(key) ? this.#data.get(key) : null; }
   setItem(key, value) { this.#data.set(key, String(value)); }
-  removeItem(key) { this.#data.delete(key); }
+  removeItem(key) {
+    this.trace?.push('clear');
+    this.#data.delete(key);
+  }
 }
 
 function product(overrides = {}) {
@@ -59,6 +65,39 @@ function draft(overrides = {}) {
   };
 }
 
+function emptyDraft() {
+  return draft({
+    supplierId: '',
+    supplierName: '',
+    note: '',
+    lines: [{ productId: '', quantity: 1, unitCost: 0 }],
+  });
+}
+
+function simulateEditorReplacement({ confirmValue, source = null, value = draft() }) {
+  const trace = [];
+  const storage = new MemoryStorage(trace);
+  const uid = 'user-a';
+  const originalSession = { kind: 'current', source: null };
+  let session = originalSession;
+  let confirmCalls = 0;
+  savePurchaseDraft(uid, value, storage);
+
+  const allowed = guardPurchaseDraftReplacement(uid, (message) => {
+    confirmCalls += 1;
+    trace.push('confirm');
+    assert.equal(message, 'Bỏ phiếu nhập đang soạn?');
+    return confirmValue;
+  }, storage);
+
+  if (allowed) {
+    trace.push(source ? 'replace-copy' : 'replace-new');
+    session = { kind: source ? 'copy' : 'new', source };
+  }
+
+  return { allowed, confirmCalls, originalSession, session, storage, trace, uid };
+}
+
 test('purchase draft key/version are UID-scoped and roundtrip all required fields', () => {
   const storage = new MemoryStorage();
   const value = draft();
@@ -87,11 +126,74 @@ test('corrupt, wrong-version and invalid numeric drafts fail safe', () => {
 });
 
 test('meaningful draft distinguishes untouched editor defaults from user work', () => {
-  const empty = draft({ supplierId: '', supplierName: '', note: '', lines: [{ productId: '', quantity: 1, unitCost: 0 }] });
+  const empty = emptyDraft();
   assert.equal(isMeaningfulPurchaseDraft(empty), false);
   assert.equal(isMeaningfulPurchaseDraft({ ...empty, note: 'ghi chú' }), true);
   assert.equal(isMeaningfulPurchaseDraft({ ...empty, lines: [{ productId: '', quantity: 2, unitCost: 0 }] }), true);
   assert.equal(isMeaningfulPurchaseDraft({ ...empty, lines: [{ productId: '', quantity: 1, unitCost: 0 }, { productId: '', quantity: 1, unitCost: 0 }] }), true);
+});
+
+test('blocker 1A: meaningful draft + new + cancel keeps draft and editor session unchanged', () => {
+  const result = simulateEditorReplacement({ confirmValue: false });
+  assert.equal(result.allowed, false);
+  assert.equal(result.confirmCalls, 1);
+  assert.strictEqual(result.session, result.originalSession);
+  assert.deepEqual(loadPurchaseDraft(result.uid, result.storage), draft());
+  assert.deepEqual(result.trace, ['confirm']);
+});
+
+test('blocker 1B: meaningful draft + new + confirm clears before opening the new editor', () => {
+  const result = simulateEditorReplacement({ confirmValue: true });
+  assert.equal(result.allowed, true);
+  assert.equal(loadPurchaseDraft(result.uid, result.storage), null);
+  assert.equal(result.session.kind, 'new');
+  assert.deepEqual(result.trace, ['confirm', 'clear', 'replace-new']);
+});
+
+test('blocker 1C: meaningful draft + copy + cancel keeps draft and does not open copy editor', () => {
+  const source = { id: 'purchase-old' };
+  const result = simulateEditorReplacement({ confirmValue: false, source });
+  assert.equal(result.allowed, false);
+  assert.strictEqual(result.session, result.originalSession);
+  assert.deepEqual(loadPurchaseDraft(result.uid, result.storage), draft());
+  assert.deepEqual(result.trace, ['confirm']);
+});
+
+test('blocker 1D: meaningful draft + copy + confirm clears before opening copy editor', () => {
+  const source = { id: 'purchase-old' };
+  const result = simulateEditorReplacement({ confirmValue: true, source });
+  assert.equal(result.allowed, true);
+  assert.equal(loadPurchaseDraft(result.uid, result.storage), null);
+  assert.equal(result.session.kind, 'copy');
+  assert.strictEqual(result.session.source, source);
+  assert.deepEqual(result.trace, ['confirm', 'clear', 'replace-copy']);
+});
+
+test('blocker 1E: non-meaningful draft opens new/copy without an unnecessary discard warning', () => {
+  const nextNew = simulateEditorReplacement({ confirmValue: false, value: emptyDraft() });
+  assert.equal(nextNew.allowed, true);
+  assert.equal(nextNew.confirmCalls, 0);
+  assert.equal(nextNew.session.kind, 'new');
+  assert.deepEqual(nextNew.trace, ['replace-new']);
+
+  const source = { id: 'purchase-old' };
+  const nextCopy = simulateEditorReplacement({ confirmValue: false, source, value: emptyDraft() });
+  assert.equal(nextCopy.allowed, true);
+  assert.equal(nextCopy.confirmCalls, 0);
+  assert.equal(nextCopy.session.kind, 'copy');
+  assert.deepEqual(nextCopy.trace, ['replace-copy']);
+});
+
+test('PurchasesPage guards persisted draft before any editor session replacement for both new and copy paths', () => {
+  const page = fs.readFileSync('src/modules/purchases/PurchasesPage.tsx', 'utf8');
+  const openCreate = page.slice(page.indexOf('function openCreate('), page.indexOf('async function handleCreate('));
+  const guardIndex = openCreate.indexOf('guardPurchaseDraftReplacement');
+  const replaceIndex = openCreate.indexOf('setEditorSession');
+  assert.ok(guardIndex >= 0, 'openCreate must guard persisted draft');
+  assert.ok(replaceIndex > guardIndex, 'draft confirmation/clear must occur before editor replacement');
+  assert.match(openCreate, /if \(uid && !guardPurchaseDraftReplacement\(uid, \(message\) => window\.confirm\(message\)\)\) return;/);
+  assert.match(page, /onCreate=\{\(\) => openCreate\(\)\}/);
+  assert.match(page, /onCopy: \(purchase: Purchase\) => openCreate\(purchase\)/);
 });
 
 test('shared Product form keeps duplicate SKU/barcode/QR, minStock and active validation/mapping', () => {
@@ -122,13 +224,28 @@ test('Purchase quick add is a true modal wrapper around shared ProductEditorForm
   assert.doesNotMatch(quick, /QuickProductForm|getQuickAddProductValidationError|toProductInput|productFormToInput|getProductFormValidationError/);
 });
 
-test('modal traps focus, Escape respects saving, errors stay inside shared form and cancel is explicit', () => {
+test('blocker 2: modal focus decision re-enters dialog after saving disables the focused control', () => {
+  assert.equal(resolvePurchaseModalFocusTarget({ focusableCount: 2, activeIndex: -1, activeInsideDialog: false, shiftKey: false }), 'first');
+  assert.equal(resolvePurchaseModalFocusTarget({ focusableCount: 2, activeIndex: -1, activeInsideDialog: false, shiftKey: true }), 'last');
+  assert.equal(resolvePurchaseModalFocusTarget({ focusableCount: 2, activeIndex: -1, activeInsideDialog: true, shiftKey: false }), 'first');
+  assert.equal(resolvePurchaseModalFocusTarget({ focusableCount: 2, activeIndex: -1, activeInsideDialog: true, shiftKey: true }), 'last');
+  assert.equal(resolvePurchaseModalFocusTarget({ focusableCount: 0, activeIndex: -1, activeInsideDialog: false, shiftKey: false }), 'dialog');
+  assert.equal(resolvePurchaseModalFocusTarget({ focusableCount: 2, activeIndex: 0, activeInsideDialog: true, shiftKey: true }), 'last');
+  assert.equal(resolvePurchaseModalFocusTarget({ focusableCount: 2, activeIndex: 1, activeInsideDialog: true, shiftKey: false }), 'first');
+  assert.equal(resolvePurchaseModalFocusTarget({ focusableCount: 2, activeIndex: 0, activeInsideDialog: true, shiftKey: false }), null);
+});
+
+test('modal integrates focus trap decision, Escape respects saving, and background cannot receive trapped Tab', () => {
   const quick = fs.readFileSync('src/modules/purchases/PurchaseQuickAddProduct.tsx', 'utf8');
   assert.match(quick, /event\.key === 'Escape'/);
   assert.match(quick, /if \(savingRef\.current\) return/);
   assert.match(quick, /event\.key !== 'Tab'/);
-  assert.match(quick, /event\.shiftKey && document\.activeElement === first/);
-  assert.match(quick, /!event\.shiftKey && document\.activeElement === last/);
+  assert.match(quick, /resolvePurchaseModalFocusTarget/);
+  assert.match(quick, /activeInsideDialog: Boolean\(activeElement && dialog\.contains\(activeElement\)\)/);
+  assert.match(quick, /const activeIndex = activeElement \? focusable\.indexOf\(activeElement as HTMLElement\) : -1/);
+  assert.match(quick, /if \(!focusTarget\) return;\s*event\.preventDefault\(\)/);
+  assert.match(quick, /focusTarget === 'dialog'/);
+  assert.match(quick, /focusTarget === 'first' \? focusable\[0\] : focusable\[focusable\.length - 1\]/);
   assert.match(quick, /error=\{error\}/);
   assert.match(quick, /onCancel=\{requestClose\}/);
   assert.match(quick, /disabled=\{saving\}>Đóng/);
