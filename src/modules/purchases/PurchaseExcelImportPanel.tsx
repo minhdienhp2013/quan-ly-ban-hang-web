@@ -309,7 +309,7 @@ export default function PurchaseExcelImportPanel({
           <div className="purchase-import-supplier-grid">
             <label>Nhà cung cấp
               <select value={supplierId} onChange={(event) => handleSupplierChange(event.target.value)} disabled={creatingProducts}>
-                <option value="">— Chưa chọn nhà cung cấp —</option>
+                <option value="">— Chưa chọn danh mục —</option>
                 {activeSuppliers.map((supplier) => <option key={supplier.id} value={supplier.id}>{supplier.code} - {supplier.name}</option>)}
               </select>
             </label>
