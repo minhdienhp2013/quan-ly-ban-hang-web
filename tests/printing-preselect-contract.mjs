@@ -58,7 +58,7 @@ const orderedProducts = [
   { id: 'D', name: 'Bravo' },
   { id: 'E', name: 'Echo' },
 ];
-const ids = (items) => items.map((item) => item.id);
+const ids = (items) => Array.from(items, (item) => item.id);
 const plain = (value) => JSON.parse(JSON.stringify(value));
 
 test('no route state keeps printing selection empty', () => {
