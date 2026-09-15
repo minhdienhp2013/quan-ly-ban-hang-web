@@ -18,11 +18,20 @@ jobs:
           cache: npm
           cache-dependency-path: package.json
 
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
       - name: Install dependencies
         run: npm install
 
       - name: Test
         run: npm test
+
+      - name: Realtime Database Rules Emulator Test
+        run: npm run test:rules
 
       - name: Build
         run: npm run build
