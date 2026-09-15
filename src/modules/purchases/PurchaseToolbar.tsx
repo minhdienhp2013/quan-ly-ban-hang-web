@@ -2,9 +2,11 @@ interface PurchaseToolbarProps {
   query: string;
   filtersOpen: boolean;
   activeFilterCount: number;
+  importDisabled: boolean;
   exportDisabled: boolean;
   onQueryChange: (value: string) => void;
   onToggleFilters: () => void;
+  onImport: () => void;
   onCreate: () => void;
   onExport: () => void;
 }
@@ -13,9 +15,11 @@ export default function PurchaseToolbar({
   query,
   filtersOpen,
   activeFilterCount,
+  importDisabled,
   exportDisabled,
   onQueryChange,
   onToggleFilters,
+  onImport,
   onCreate,
   onExport,
 }: PurchaseToolbarProps) {
@@ -41,6 +45,7 @@ export default function PurchaseToolbar({
         >
           Bộ lọc{activeFilterCount ? ` (${activeFilterCount})` : ''}
         </button>
+        <button className="button button--secondary purchase-touch" type="button" disabled={importDisabled} onClick={onImport}>Nhập Excel</button>
         <button className="button button--primary purchase-touch" type="button" onClick={onCreate}>+ Nhập hàng</button>
         <button className="button button--secondary purchase-touch" type="button" disabled={exportDisabled} onClick={onExport}>Xuất Excel</button>
       </div>

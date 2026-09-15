@@ -5,6 +5,7 @@ import type { Product, Purchase, Supplier } from '../../types/models';
 import { subscribeProducts } from '../products/productService';
 import { subscribeSuppliers } from '../suppliers/supplierService';
 import PurchaseEditor from './PurchaseEditor';
+import PurchaseExcelImportPanel from './PurchaseExcelImportPanel';
 import PurchaseFilters from './PurchaseFilters';
 import PurchaseResponsiveList from './PurchaseResponsiveList';
 import PurchaseTable from './PurchaseTable';
@@ -29,6 +30,7 @@ import {
 import { cancelPurchase, createPurchase, subscribePurchases, type CreatePurchaseInput } from './purchaseService';
 import './purchases.css';
 import './purchaseSmartProductSearch.css';
+import './purchaseExcelImport.css';
 
 type EditorSession = { key: number; source: Purchase | null; draft: PurchaseDraft | null } | null;
 
@@ -36,6 +38,7 @@ export default function PurchasesPage() {
   const { appUser } = useAuth();
   const navigate = useNavigate();
   const [products, setProducts] = useState<Product[]>([]);
+  const [importCreatedProducts, setImportCreatedProducts] = useState<Product[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [purchases, setPurchases] = useState<Purchase[]>([]);
   const [purchasesLoadState, setPurchasesLoadState] = useState<PurchaseSourceLoadState>('pending');
@@ -48,6 +51,7 @@ export default function PurchasesPage() {
   const [toDate, setToDate] = useState('');
   const [onlyMine, setOnlyMine] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [selectedPurchaseId, setSelectedPurchaseId] = useState<string | null>(null);
@@ -59,6 +63,20 @@ export default function PurchasesPage() {
   const detailOpenerRef = useRef<HTMLElement | null>(null);
   const detailWasOpenRef = useRef(false);
   const restoredDraftUidRef = useRef<string | null>(null);
+
+  const availableProducts = useMemo(() => {
+    const byId = new Map(products.map((product) => [product.id, product]));
+    for (const product of importCreatedProducts) {
+      if (!byId.has(product.id)) byId.set(product.id, product);
+    }
+    return [...byId.values()];
+  }, [products, importCreatedProducts]);
+
+  useEffect(() => {
+    if (importCreatedProducts.length === 0) return;
+    const subscribedIds = new Set(products.map((product) => product.id));
+    setImportCreatedProducts((current) => current.filter((product) => !subscribedIds.has(product.id)));
+  }, [products, importCreatedProducts.length]);
 
   useEffect(() => {
     let unsubPurchases: (() => void) | undefined;
@@ -191,8 +209,40 @@ export default function PurchasesPage() {
     const uid = appUser?.uid ?? '';
     if (uid && !guardPurchaseDraftReplacement(uid, (message) => window.confirm(message))) return;
 
+    setImportOpen(false);
     setError(null); setNotice(null); setSelectedPurchaseId(null);
     setEditorSession({ key: Date.now(), source, draft: null });
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  function openImport() {
+    if (productsLoadState !== 'ready') {
+      setError('Cần tải xong danh mục Product trước khi đối chiếu Excel.');
+      return;
+    }
+    const uid = appUser?.uid ?? '';
+    if (!uid) {
+      setError('Không thể xác định người dùng import Excel.');
+      return;
+    }
+    if (!guardPurchaseDraftReplacement(uid, (message) => window.confirm(message))) return;
+
+    setError(null); setNotice(null); setSelectedPurchaseId(null);
+    setEditorSession(null);
+    setImportOpen(true);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  function handleImportReady(draft: PurchaseDraft, createdProducts: Product[]) {
+    setImportCreatedProducts((current) => {
+      const byId = new Map(current.map((product) => [product.id, product]));
+      for (const product of createdProducts) byId.set(product.id, product);
+      return [...byId.values()];
+    });
+    setImportOpen(false);
+    setError(null);
+    setNotice('Đã đưa dữ liệu Excel vào phiếu nhập nháp. Hãy kiểm tra/chỉnh sửa trước khi hoàn tất.');
+    setEditorSession({ key: Date.now(), source: null, draft });
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
@@ -289,9 +339,11 @@ export default function PurchasesPage() {
         <PurchaseFilters open={filtersOpen} status={status} supplierId={supplierId} fromDate={fromDate} toDate={toDate} onlyMine={onlyMine} suppliers={suppliers} onStatusChange={setStatus} onSupplierChange={setSupplierId} onFromDateChange={setFromDate} onToDateChange={setToDate} onOnlyMineChange={setOnlyMine} onClear={clearFilters} />
 
         <main className="purchase-main">
-          <PurchaseToolbar query={query} filtersOpen={filtersOpen} activeFilterCount={activeFilterCount} exportDisabled={loading || hasLoadError} onQueryChange={(value) => { setQuery(value); setNotice(null); }} onToggleFilters={() => setFiltersOpen((current) => !current)} onCreate={() => openCreate()} onExport={handleExportList} />
+          <PurchaseToolbar query={query} filtersOpen={filtersOpen} activeFilterCount={activeFilterCount} importDisabled={productsLoadState !== 'ready'} exportDisabled={loading || hasLoadError} onQueryChange={(value) => { setQuery(value); setNotice(null); }} onToggleFilters={() => setFiltersOpen((current) => !current)} onImport={openImport} onCreate={() => openCreate()} onExport={handleExportList} />
 
-          {editorSession ? <PurchaseEditor key={editorSession.key} products={products} suppliers={suppliers} actorUid={appUser?.uid ?? ''} sourcePurchase={editorSession.source} initialDraft={editorSession.draft} busy={creating} onClose={() => { if (!creating) setEditorSession(null); }} onSubmit={handleCreate} /> : null}
+          {importOpen && appUser ? <PurchaseExcelImportPanel products={availableProducts} suppliers={suppliers} actorUid={appUser.uid} onClose={() => setImportOpen(false)} onReady={handleImportReady} /> : null}
+
+          {editorSession ? <PurchaseEditor key={editorSession.key} products={availableProducts} suppliers={suppliers} actorUid={appUser?.uid ?? ''} sourcePurchase={editorSession.source} initialDraft={editorSession.draft} busy={creating} onClose={() => { if (!creating) setEditorSession(null); }} onSubmit={handleCreate} /> : null}
 
           <section className="purchase-list-panel" aria-label="Danh sách phiếu nhập">
             <div className="purchase-list-heading"><span>{loading ? 'Đang tải phiếu nhập...' : hasLoadError ? 'Không thể tải đầy đủ dữ liệu nhập hàng' : `Hiển thị ${filteredPurchases.length} phiếu nhập hàng`}</span></div>
