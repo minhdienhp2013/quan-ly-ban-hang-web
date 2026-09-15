@@ -604,9 +604,9 @@ export default function SalesPage() {
                       <button type="button" aria-label={`Giảm số lượng ${product.name}`} onClick={() => setLineQuantity(product, line.quantity - 1)}>−</button>
                       <input
                         type="number"
-                        inputMode="numeric"
-                        min="1"
-                        step="1"
+                        inputMode="decimal"
+                        min="0.001"
+                        step="0.001"
                         max={Number(product.stockQuantity) || undefined}
                         value={line.quantity}
                         aria-label={`Số lượng ${product.name}`}
