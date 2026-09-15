@@ -73,9 +73,12 @@ test('old draft, copied Purchase and Excel handoff resolve missing salePrice fro
 test('sale-price input has a persistent accessible name, numeric VND editing and transient submit value', () => {
   const editor = fs.readFileSync('src/modules/purchases/PurchaseEditor.tsx', 'utf8');
   const css = fs.readFileSync('src/modules/purchases/purchases.css', 'utf8');
-  assert.match(editor, /<span className="purchase-mobile-label">Giá bán<\/span><input aria-label="Giá bán" type="number" inputMode="numeric" min="0" step="1"/);
+  const moneyInput = fs.readFileSync('src/shared/numeric/VndMoneyInput.tsx', 'utf8');
+  const moneyCss = fs.readFileSync('src/shared/numeric/vndMoneyInput.css', 'utf8');
+  assert.match(editor, /<VndMoneyInput label="Giá bán" labelClassName="purchase-mobile-label" value=\{line\.salePrice \?\? ''\}/);
+  assert.match(moneyInput, /aria-label=\{accessibleName\}[\s\S]*?type="number"[\s\S]*?inputMode="numeric"[\s\S]*?min=\{min\}[\s\S]*?step="any"/);
   assert.match(css, /\.purchase-mobile-label\{display:none\}/);
-  assert.match(css, /\.purchase-editor input,\.purchase-editor select,\.purchase-editor textarea\{[^}]*min-height:44px/);
+  assert.match(moneyCss, /\.vnd-money-input \.vnd-money-input__field\{[^}]*min-height:44px/);
   assert.match(editor, /salePrice: line\.salePrice as number/);
   assert.match(editor, /Giá bán không hợp lệ\./);
   assert.match(editor, /!Number\.isFinite\(line\.salePrice\) \|\| line\.salePrice < 0/);
@@ -126,6 +129,7 @@ test('draft/editor paths have no independent Product writer and Excel preview re
 test('responsive Purchase editor reflows by actual editor width and preserves mobile/touch contracts', () => {
   const css = fs.readFileSync('src/modules/purchases/purchases.css', 'utf8');
   const smartCss = fs.readFileSync('src/modules/purchases/purchaseSmartProductSearch.css', 'utf8');
+  const moneyCss = fs.readFileSync('src/shared/numeric/vndMoneyInput.css', 'utf8');
   const appCss = fs.readFileSync('src/styles.css', 'utf8');
   const editor = fs.readFileSync('src/modules/purchases/PurchaseEditor.tsx', 'utf8');
 
@@ -153,6 +157,8 @@ test('responsive Purchase editor reflows by actual editor width and preserves mo
 
   assert.match(smartCss, /\.purchase-product-picker-row\{[^}]*grid-template-columns:minmax\(0,1fr\) 44px 44px/);
   assert.match(smartCss, /\.purchase-product-icon-button\{[^}]*width:44px;height:44px;min-width:44px/);
+  assert.match(moneyCss, /\.vnd-money-input__steps\{[^}]*grid-template-columns:repeat\(2,minmax\(44px,1fr\)\)/);
+  assert.match(moneyCss, /\.vnd-money-input__step\{[^}]*min-width:44px;min-height:44px/);
 
   const targetEditorWidths = {
     1366: 1366 - 250 - 80 - 240 - 14 - 36,
@@ -164,5 +170,5 @@ test('responsive Purchase editor reflows by actual editor width and preserves mo
   assert.ok(targetEditorWidths[768] <= 620);
 
   assert.match(editor, /<span>Giá bán<\/span>/);
-  assert.match(editor, /purchase-mobile-label">Giá bán/);
+  assert.match(editor, /<VndMoneyInput label="Giá bán" labelClassName="purchase-mobile-label"/);
 });

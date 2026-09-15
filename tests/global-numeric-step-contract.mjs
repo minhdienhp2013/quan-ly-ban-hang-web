@@ -42,7 +42,7 @@ test('product transaction quantities use native step 1 while stocktake keeps zer
   const stockout = read('src/modules/stockout/StockOutPage.tsx');
   const stocktake = read('src/modules/stocktake/StocktakePage.tsx');
 
-  assert.match(purchase, /Số lượng<\/span><input[^>]*type="number"[^>]*min="1"[^>]*step="1"/s);
+  assert.match(purchase, /inputMode="numeric" min="1" step="1" value=\{line\.quantity\}/);
   assert.match(sales, /className="sales-qty-control"[\s\S]*?<input[\s\S]*?type="number"[\s\S]*?min="1"[\s\S]*?step="1"/);
   assert.match(stockout, /Số lượng<input type="number" inputMode="numeric" min="1" step="1"/);
   assert.equal((stocktake.match(/type="number"\s+inputMode="numeric"\s+min="0"\s+step="1"/g) ?? []).length, 2);
