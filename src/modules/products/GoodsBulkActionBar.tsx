@@ -1,9 +1,12 @@
+import type { Ref } from 'react';
+
 interface GoodsBulkActionBarProps {
   count: number;
   showDeactivate: boolean;
   showPermanentDelete: boolean;
   deactivating?: boolean;
   deleting?: boolean;
+  permanentDeleteButtonRef?: Ref<HTMLButtonElement>;
   onPrint: () => void;
   onDeactivate: () => void;
   onPermanentDelete: () => void;
@@ -16,6 +19,7 @@ export default function GoodsBulkActionBar({
   showPermanentDelete,
   deactivating = false,
   deleting = false,
+  permanentDeleteButtonRef,
   onPrint,
   onDeactivate,
   onPermanentDelete,
@@ -39,16 +43,14 @@ export default function GoodsBulkActionBar({
           Bỏ chọn
         </button>
         {showPermanentDelete ? (
-          <span
-            className="goods-bulk-danger-slot"
-            style={{ marginLeft: 12, paddingLeft: 12, borderLeft: '1px solid #efb4b4' }}
-          >
+          <span className="goods-bulk-danger-slot">
             <button
-              className="button goods-touch"
-              style={{ color: '#b42318', borderColor: '#e6a2a2', background: '#fff1f1' }}
+              ref={permanentDeleteButtonRef}
+              className="button goods-danger-button goods-touch"
               type="button"
               onClick={onPermanentDelete}
-              disabled={busy}
+              aria-disabled={busy}
+              aria-busy={deleting}
             >
               {deleting ? 'Đang kiểm tra/xóa...' : 'Xóa vĩnh viễn đã chọn'}
             </button>
