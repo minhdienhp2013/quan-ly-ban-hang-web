@@ -47,6 +47,7 @@ export default function GoodsBulkActionBar({
             className="goods-bulk-danger-slot"
             style={{ marginLeft: 12, paddingLeft: 12, borderLeft: '1px solid #efb4b4' }}
           >
+            {/* aria-disabled={busy}: keep the destructive control focusable while async work is running. */}
             <button
               ref={permanentDeleteButtonRef}
               className="button goods-touch"
