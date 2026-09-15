@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "test": "node --test tests/*.mjs",
-    "test:rules": "firebase emulators:exec --only database \"node --test tests/product-permanent-delete-rules.mjs\" --project demo-products-delete",
+    "test:rules": "firebase emulators:exec --only database \"node --test tests/rules/product-permanent-delete-rules.mjs\" --project demo-products-delete",
     "preview": "vite preview"
   },
   "dependencies": {
