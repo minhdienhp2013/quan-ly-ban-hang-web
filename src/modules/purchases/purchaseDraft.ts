@@ -127,3 +127,14 @@ export function isMeaningfulPurchaseDraft(draft: PurchaseDraft): boolean {
     || line.unitCost !== 0,
   );
 }
+
+export function guardPurchaseDraftReplacement(
+  uid: string,
+  confirmDiscard: (message: string) => boolean,
+  storage?: Storage | null,
+): boolean {
+  const existingDraft = loadPurchaseDraft(uid, storage);
+  if (!existingDraft || !isMeaningfulPurchaseDraft(existingDraft)) return true;
+  if (!confirmDiscard('Bỏ phiếu nhập đang soạn?')) return false;
+  return clearPurchaseDraft(uid, storage);
+}
