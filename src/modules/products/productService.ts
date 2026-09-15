@@ -1,10 +1,22 @@
-import { get, onValue, push, ref, update, type Unsubscribe } from 'firebase/database';
+import {
+  get,
+  onDisconnect,
+  onValue,
+  push,
+  ref,
+  update,
+  type OnDisconnect,
+  type Unsubscribe,
+} from 'firebase/database';
 import { db } from '../../firebase/client';
 import type { AuditLog, Product } from '../../types/models';
 import {
+  buildLockFailurePreflight,
   buildProductPermanentDeletePreflight,
+  toStoredProductRecord,
   type ProductPermanentDeletePreflight,
   type ProductReferenceSnapshots,
+  type StoredProductRecord,
 } from './productPermanentDelete';
 
 export interface ProductInput {
@@ -68,7 +80,9 @@ export function subscribeProducts(
       const products = Object.entries(raw)
         .map(([key, product]) => ({
           ...product,
-          id: product.id || key,
+          // Firebase child key is the physical identity. A malformed stored id is
+          // intentionally not allowed to redirect selection or destructive writes.
+          id: key,
           stockQuantity: Number(product.stockQuantity) || 0,
           stockVersion: Number(product.stockVersion) || 0,
         }))
@@ -220,19 +234,30 @@ export async function setProductActive(
 
 async function readPermanentDeletePreflight(
   selectedProducts: readonly Product[],
+  allowedLockActorUid?: string,
 ): Promise<ProductPermanentDeletePreflight> {
   const database = requireDatabase();
-  const [productsSnapshot, salesSnapshot, purchasesSnapshot, stockOutsSnapshot, movementsSnapshot, stocktakesSnapshot] = await Promise.all([
+  const [
+    productsSnapshot,
+    salesSnapshot,
+    purchasesSnapshot,
+    stockOutsSnapshot,
+    movementsSnapshot,
+    stocktakesSnapshot,
+    deletionLocksSnapshot,
+  ] = await Promise.all([
     get(ref(database, 'products')),
     get(ref(database, 'sales')),
     get(ref(database, 'purchases')),
     get(ref(database, 'stockOuts')),
     get(ref(database, 'stockMovements')),
     get(ref(database, 'stocktakes')),
+    get(ref(database, 'productDeletionLocks')),
   ]);
 
   const rawProducts = (productsSnapshot.val() ?? {}) as Record<string, Product>;
-  const currentProducts = Object.entries(rawProducts).map(([id, product]) => ({ ...product, id: product.id || id }));
+  const currentProducts: StoredProductRecord[] = Object.entries(rawProducts)
+    .map(([storageKey, product]) => toStoredProductRecord(storageKey, product));
   const references: ProductReferenceSnapshots = {
     sales: salesSnapshot.val(),
     purchases: purchasesSnapshot.val(),
@@ -241,7 +266,13 @@ async function readPermanentDeletePreflight(
     stocktakes: stocktakesSnapshot.val(),
   };
 
-  return buildProductPermanentDeletePreflight(selectedProducts, currentProducts, references);
+  return buildProductPermanentDeletePreflight(
+    selectedProducts,
+    currentProducts,
+    references,
+    deletionLocksSnapshot.val(),
+    allowedLockActorUid,
+  );
 }
 
 export async function preflightPermanentProductDeletion(
@@ -250,36 +281,107 @@ export async function preflightPermanentProductDeletion(
   return readPermanentDeletePreflight(selectedProducts);
 }
 
+function deletionLockUpdates(products: readonly StoredProductRecord[], actorUid: string) {
+  const createdAt = Date.now();
+  return Object.fromEntries(products.map((record) => [
+    `productDeletionLocks/${record.storageKey}`,
+    { productId: record.storageKey, actorUid, createdAt },
+  ]));
+}
+
+async function registerDeletionLockDisconnectCleanup(productKeys: readonly string[]): Promise<OnDisconnect[]> {
+  const database = requireDatabase();
+  const handlers = productKeys.map((productKey) => onDisconnect(ref(database, `productDeletionLocks/${productKey}`)));
+  try {
+    await Promise.all(handlers.map((handler) => handler.remove()));
+    return handlers;
+  } catch {
+    await Promise.allSettled(handlers.map((handler) => handler.cancel()));
+    throw new Error('Không thể chuẩn bị cơ chế giải phóng khóa xóa an toàn. Không có sản phẩm nào bị xóa.');
+  }
+}
+
+async function cancelDeletionLockDisconnectCleanup(handlers: readonly OnDisconnect[]) {
+  await Promise.allSettled(handlers.map((handler) => handler.cancel()));
+}
+
+async function releaseDeletionLocks(productKeys: readonly string[]) {
+  if (productKeys.length === 0) return;
+  const database = requireDatabase();
+  await update(ref(database), Object.fromEntries(productKeys.map((productKey) => [
+    `productDeletionLocks/${productKey}`,
+    null,
+  ])));
+}
+
 export async function deleteProductsPermanently(
   selectedProducts: readonly Product[],
   actorUid: string,
 ): Promise<{ deleted: number; preflight: ProductPermanentDeletePreflight }> {
   if (!actorUid) throw new Error('Không thể xác định người dùng xóa sản phẩm.');
 
-  // Revalidate immediately before the destructive write so stale UI/preflight data
-  // cannot silently turn into a partial or unsafe delete.
-  const preflight = await readPermanentDeletePreflight(selectedProducts);
-  if (!preflight.canDeleteAll) return { deleted: 0, preflight };
+  const initialPreflight = await readPermanentDeletePreflight(selectedProducts);
+  if (!initialPreflight.canDeleteAll) return { deleted: 0, preflight: initialPreflight };
 
-  const database = requireDatabase();
-  const now = Date.now();
-  const updates: Record<string, unknown> = {};
+  const productKeys = initialPreflight.eligibleProducts.map((record) => record.storageKey);
+  const disconnectCleanup = await registerDeletionLockDisconnectCleanup(productKeys);
+  let locksAcquired = false;
+  let committed = false;
 
-  for (const product of preflight.eligibleProducts) {
-    const auditKey = push(ref(database, 'auditLogs')).key;
-    if (!auditKey) throw new Error('Không thể tạo nhật ký xóa sản phẩm.');
-    const audit = buildAuditLog(
-      auditKey,
-      actorUid,
-      'PRODUCT_DELETED',
-      product.id,
-      `Xóa vĩnh viễn sản phẩm ${product.sku} - ${product.name}`,
-      now,
-    );
-    updates[`products/${product.id}`] = null;
-    updates[`auditLogs/${auditKey}`] = audit;
+  try {
+    try {
+      await update(ref(requireDatabase()), deletionLockUpdates(initialPreflight.eligibleProducts, actorUid));
+      locksAcquired = true;
+    } catch {
+      await cancelDeletionLockDisconnectCleanup(disconnectCleanup);
+      const freshPreflight = await readPermanentDeletePreflight(selectedProducts);
+      return { deleted: 0, preflight: buildLockFailurePreflight(freshPreflight) };
+    }
+
+    // Once locks exist, Rules reject every new Product reference and every non-delete
+    // Product write. Re-read the full eligibility state inside that exclusion window.
+    const lockedPreflight = await readPermanentDeletePreflight(selectedProducts, actorUid);
+    if (!lockedPreflight.canDeleteAll) {
+      return { deleted: 0, preflight: lockedPreflight };
+    }
+
+    const database = requireDatabase();
+    const now = Date.now();
+    const updates: Record<string, unknown> = {};
+
+    for (const record of lockedPreflight.eligibleProducts) {
+      const productKey = record.storageKey;
+      const product = record.product;
+      const auditKey = push(ref(database, 'auditLogs')).key;
+      if (!auditKey) throw new Error('Không thể tạo nhật ký xóa sản phẩm.');
+      const audit = buildAuditLog(
+        auditKey,
+        actorUid,
+        'PRODUCT_DELETED',
+        productKey,
+        `Xóa vĩnh viễn sản phẩm ${product.sku} - ${product.name}`,
+        now,
+      );
+      updates[`products/${productKey}`] = null;
+      updates[`auditLogs/${auditKey}`] = audit;
+      updates[`productDeletionLocks/${productKey}`] = null;
+    }
+
+    await update(ref(database), updates);
+    committed = true;
+    locksAcquired = false;
+    await cancelDeletionLockDisconnectCleanup(disconnectCleanup);
+    return { deleted: lockedPreflight.eligibleProducts.length, preflight: lockedPreflight };
+  } catch {
+    throw new Error('Không thể hoàn tất xóa vĩnh viễn an toàn. Không có sản phẩm nào được báo là đã xóa.');
+  } finally {
+    if (locksAcquired && !committed) {
+      try {
+        await releaseDeletionLocks(productKeys);
+        await cancelDeletionLockDisconnectCleanup(disconnectCleanup);
+      } catch {
+        // onDisconnect handlers stay registered as the crash/network fail-safe.
+      }
+    }
   }
-
-  await update(ref(database), updates);
-  return { deleted: preflight.eligibleProducts.length, preflight };
 }
