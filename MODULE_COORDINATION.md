@@ -10,10 +10,52 @@ Mỗi chat trước khi code phải đọc:
 - `DATABASE_SCHEMA.md`
 - `AI_TASKS.md`
 - `MODULE_COORDINATION.md`
+- `AGENTS.md`
 
 Không chat nào được tự sửa `DATABASE_SCHEMA.md`, `PROJECT_RULES.md`, `database.rules.json`, `src/types/models.ts` hoặc kiến trúc router tổng nếu nhiệm vụ không cho phép. Nếu cần thay đổi, ghi đề xuất trong PR để AI trung tâm xử lý.
 
 Mỗi chat làm trên branch riêng và mở PR về `main`. Không merge trực tiếp nếu CI chưa xanh.
+
+## Pre-code bắt buộc cho mọi chat
+
+Trước implementation, mỗi chat phải thực hiện theo thứ tự:
+
+`SEARCH → READ → TRACE → REUSE → EXTEND → CREATE`
+
+Và báo ngắn cho AI trung tâm:
+
+A. Đã đọc những file nào.
+
+B. Đã search code tương tự ở đâu.
+
+C. Sẽ reuse helper/service/component/type/pattern nào.
+
+D. Dự kiến sửa những file nào.
+
+E. Sẽ KHÔNG sửa những file/shared contract nào.
+
+F. Root cause hoặc implementation point nhỏ nhất đã xác định là gì.
+
+G. Có cần đổi schema, Security Rules, shared contract, dependency hoặc module ownership không.
+
+Nếu câu G là **có**, chat phải DỪNG và chờ AI trung tâm duyệt trước khi code.
+
+Không tạo helper/component/service mới chỉ vì thuận tiện nếu chức năng tương đương đã tồn tại. Không tạo implementation thứ hai cho cùng trách nhiệm nghiệp vụ.
+
+## Đoạn bắt buộc trong prompt AI phụ
+
+Mọi prompt implementation do AI trung tâm giao phải chứa hoặc dẫn chiếu rõ các yêu cầu tương đương sau:
+
+> Trước khi viết code mới:
+> 1. Search toàn bộ vùng code liên quan.
+> 2. Tìm implementation/helper/service/component đã tồn tại.
+> 3. Trace luồng dữ liệu end-to-end.
+> 4. Reuse hoặc extend implementation hiện có nếu phù hợp.
+> 5. Không tạo hệ thống song song.
+> 6. Không thêm abstraction/dependency/file nếu không thực sự cần.
+> 7. Sửa root cause, không vá symptom.
+> 8. Giữ diff nhỏ nhất có thể nhưng correctness/security/data integrity ưu tiên cao hơn số dòng code.
+> 9. Nếu cần đổi schema, Security Rules, shared contract hoặc module ownership: DỪNG và báo AI trung tâm.
 
 ## Chat A — Kho / Nhập hàng / Xuất hàng / Kiểm kê
 
@@ -38,6 +80,7 @@ Yêu cầu:
 - Không âm thầm cho tồn âm nếu chưa có quyết định riêng.
 - Tồn đầu kỳ từ Excel phải tạo `OPENING_BALANCE`.
 - Responsive mobile/tablet/PC.
+- Reuse stock/CAS service hiện có; cấm tạo stock updater song song.
 
 ## Chat B — Khách hàng / Nhà cung cấp / Chi phí
 
@@ -59,6 +102,7 @@ Yêu cầu:
 - Search nhanh theo tên/mã/điện thoại.
 - Chi phí dùng số nguyên VND và chỉ owner truy cập theo Rules hiện tại.
 - Responsive mobile/tablet/PC.
+- Không duplicate Customer/Supplier model hoặc search helper nếu shared implementation đã có.
 
 ## Chat C — QR / Barcode / In tem
 
@@ -82,6 +126,7 @@ Yêu cầu:
 - Có custom size theo mm.
 - Print CSS độc lập màn hình.
 - Không yêu cầu phần mềm desktop để thao tác cơ bản.
+- Reuse Product lookup/search/handoff contract; không tạo product search/database song song.
 
 ## Chat D — Bán hàng/POS
 
@@ -101,6 +146,7 @@ Yêu cầu:
 - Tạo đơn + trừ tồn phải nguyên tử/an toàn.
 - Hủy/hoàn đơn tạo movement hoàn kho, không xóa lịch sử.
 - Hỗ trợ khách lẻ và chọn Customer.
+- Reuse inventory stock operation/CAS; không viết cơ chế trừ tồn riêng.
 
 ## Chat E — Báo cáo / Backup / QA
 
@@ -119,6 +165,7 @@ Yêu cầu:
 - Backup JSON có `schemaVersion` và preview trước restore.
 - Không commit backup dữ liệu thật vào GitHub.
 - Regression test mobile/tablet/PC.
+- Không tạo nguồn doanh thu/COGS/profit thứ hai nếu report service hiện có đã là nguồn chuẩn.
 
 ## Trách nhiệm AI trung tâm
 
@@ -128,7 +175,41 @@ AI trung tâm:
 - phát hiện xung đột;
 - quyết định thứ tự merge;
 - cập nhật task board;
-- không để hai chat cùng sửa cùng một service nghiệp vụ cốt lõi.
+- không để hai chat cùng sửa cùng một service nghiệp vụ cốt lõi;
+- xác định owner nếu cần shared implementation;
+- kiểm tra reuse/duplication/root-cause/scope trước khi merge.
+
+Trước khi merge, AI trung tâm phải kiểm tra tối thiểu:
+
+1. Scope đúng task.
+2. Không viết lại thứ đã tồn tại.
+3. Không tạo hệ thống song song.
+4. Không thêm dependency/abstraction/file không cần thiết.
+5. Không phá shared contract/schema/Rules.
+6. Không sửa stock trực tiếp hoặc phá CAS/idempotency.
+7. Không tạo race/data-loss/security/permission regression không được xử lý.
+8. Responsive/accessibility phù hợp scope.
+9. Logic quan trọng có test/regression test.
+10. Diff đã nhỏ hợp lý nhưng không đánh đổi correctness.
+
+## Báo cáo sau implementation
+
+Mỗi chat phải trả về:
+
+- branch;
+- base SHA;
+- head SHA;
+- files changed;
+- code/pattern đã reuse;
+- code mới thực sự cần tạo;
+- tests/build/CI;
+- contract đã kiểm tra;
+- known limitations;
+- schema/security/dependency có thay đổi hay không;
+- conflict/impact module khác;
+- PR number.
+
+Không chấp nhận báo cáo chỉ có “đã hoàn thành”.
 
 ## Thứ tự merge khuyến nghị
 
