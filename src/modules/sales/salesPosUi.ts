@@ -24,6 +24,12 @@ export type QuickAmountParseResult =
   | { state: 'invalid'; amount: null; message: string }
   | { state: 'valid'; amount: number; message: '' };
 
+export interface RecentSaleSummary {
+  label: string;
+  quantity: number;
+  note: string;
+}
+
 const MAX_SAFE_THOUSANDS = Math.floor(Number.MAX_SAFE_INTEGER / 1000);
 
 export function parseQuickServiceAmount(rawValue: string): QuickAmountParseResult {
@@ -49,10 +55,13 @@ export function getRecentSales(sales: readonly Sale[], limit = 4): Sale[] {
   return [...sales].sort((left, right) => right.createdAt - left.createdAt).slice(0, safeLimit);
 }
 
-export function summarizeRecentSale(sale: Sale) {
-  const items = Array.isArray(sale.items) ? sale.items : Object.values(sale.items ?? {});
+export function summarizeRecentSale(sale: Sale): RecentSaleSummary {
+  // subscribeSales() normalizes persisted Firebase item collections into SaleItem[].
+  // Keep this helper aligned with that existing Sales read contract instead of
+  // introducing another transaction-normalization path in the POS UI.
+  const items = Array.isArray(sale.items) ? sale.items : [];
   const first = items[0];
-  const totalQuantity = items.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0);
+  const totalQuantity = items.reduce<number>((sum, item) => sum + (Number(item.quantity) || 0), 0);
   const extraCount = Math.max(0, items.length - 1);
   return {
     label: first ? `${first.name}${extraCount ? ` +${extraCount}` : ''}` : sale.code,
