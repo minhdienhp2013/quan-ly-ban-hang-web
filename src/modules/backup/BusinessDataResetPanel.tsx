@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   BUSINESS_DATA_RESET_CONFIRMATION_PHRASE,
   BUSINESS_DATA_RESET_DELETE_NODES,
@@ -14,27 +14,43 @@ interface BusinessDataResetPanelProps {
 
 const FINAL_WARNING =
   'Thao tác này sẽ xóa vĩnh viễn toàn bộ hàng hóa và lịch sử giao dịch.\n\n' +
-  'Không thể hoàn tác nếu không có bản backup.\n\n' +
+  'Không thể hoàn tác bằng giao diện hiện tại.\n\n' +
+  'Hệ thống sẽ tạo file backup trước khi xóa, nhưng chức năng phục hồi tự động từ file backup hiện chưa được hỗ trợ.\n\n' +
   'Bạn có chắc chắn muốn tiếp tục?';
 
 export default function BusinessDataResetPanel({ actorUid }: BusinessDataResetPanelProps) {
+  const resetButtonRef = useRef<HTMLButtonElement>(null);
+  const successRef = useRef<HTMLParagraphElement>(null);
+  const runningRef = useRef(false);
   const [confirmation, setConfirmation] = useState('');
   const [busy, setBusy] = useState(false);
   const [backupCreated, setBackupCreated] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [focusSuccess, setFocusSuccess] = useState(false);
 
   const phraseMatches = isBusinessDataResetConfirmation(confirmation);
 
-  async function handleReset() {
-    if (busy || !phraseMatches) return;
-    const confirmed = window.confirm(FINAL_WARNING);
-    if (!confirmed) return;
+  useEffect(() => {
+    if (!focusSuccess || !success) return;
+    successRef.current?.focus();
+    setFocusSuccess(false);
+  }, [focusSuccess, success]);
 
+  async function handleReset() {
+    if (busy || runningRef.current || !phraseMatches) return;
+    const confirmed = window.confirm(FINAL_WARNING);
+    if (!confirmed) {
+      requestAnimationFrame(() => resetButtonRef.current?.focus());
+      return;
+    }
+
+    runningRef.current = true;
     setBusy(true);
     setBackupCreated(false);
     setError('');
     setSuccess('');
+    let completed = false;
 
     try {
       await resetBusinessData(actorUid, (backup) => {
@@ -43,10 +59,16 @@ export default function BusinessDataResetPanel({ actorUid }: BusinessDataResetPa
       });
       setConfirmation('');
       setSuccess('Đã xóa toàn bộ dữ liệu hàng hóa và giao dịch.');
+      setFocusSuccess(true);
+      completed = true;
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Reset dữ liệu thất bại. Không báo thành công.');
     } finally {
+      runningRef.current = false;
       setBusy(false);
+      if (!completed) {
+        requestAnimationFrame(() => resetButtonRef.current?.focus());
+      }
     }
   }
 
@@ -91,9 +113,11 @@ export default function BusinessDataResetPanel({ actorUid }: BusinessDataResetPa
           disabled={busy}
         />
         <button
+          ref={resetButtonRef}
           className="button danger-zone__button"
           type="button"
-          disabled={busy || !phraseMatches}
+          aria-disabled={busy || !phraseMatches}
+          aria-busy={busy}
           onClick={() => void handleReset()}
         >
           {busy ? 'Đang backup và reset…' : 'Xóa toàn bộ dữ liệu hàng hóa & giao dịch'}
@@ -104,7 +128,9 @@ export default function BusinessDataResetPanel({ actorUid }: BusinessDataResetPa
         <p className="form-success" role="status">Đã tạo bản sao lưu trước khi xóa.</p>
       ) : null}
       {error ? <p className="form-error" role="alert">{error}</p> : null}
-      {success ? <p className="form-success" role="status">{success}</p> : null}
+      {success ? (
+        <p ref={successRef} className="form-success" role="status" tabIndex={-1}>{success}</p>
+      ) : null}
 
       <p className="danger-zone__note">
         Backup được tải xuống máy dưới dạng JSON. Chức năng restore write hiện vẫn bị khóa an toàn;
