@@ -172,7 +172,7 @@ test('draft persists editor data, restores by UID, and create/discard are the on
   assert.match(page, /const draft = loadPurchaseDraft\(uid\)/);
   assert.match(page, /source: null, draft/);
   assert.match(page, /const purchase = await createPurchase\(input, appUser\.uid\);\s*clearPurchaseDraft\(appUser\.uid\)/);
-  assert.doesNotMatch(page, /return \(\) => \{[\s\S]*?clearPurchaseDraft/);
+  assert.match(page, /return \(\) => \{\s*unsubPurchases\?\.\(\);\s*unsubProducts\?\.\(\);\s*unsubSuppliers\?\.\(\);\s*\};/);
   const quick = fs.readFileSync('src/modules/purchases/PurchaseQuickAddProduct.tsx', 'utf8');
   assert.doesNotMatch(quick, /clearPurchaseDraft|savePurchaseDraft/);
 });
