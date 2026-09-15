@@ -104,7 +104,6 @@ export default function SalesPage() {
   const { appUser } = useAuth();
   const initialDraft = useMemo(() => readSavedDraft(), []);
   const searchInputRef = useRef<HTMLInputElement>(null);
-  const scanToggleRef = useRef<HTMLButtonElement>(null);
   const historyBackButtonRef = useRef<HTMLButtonElement>(null);
   const [view, setView] = useState<'pos' | 'history'>('pos');
   const [products, setProducts] = useState<Product[]>([]);
@@ -318,8 +317,7 @@ export default function SalesPage() {
 
   function toggleScanner() {
     if (scannerOpen) {
-      setScannerOpen(false);
-      requestAnimationFrame(() => scanToggleRef.current?.focus());
+      closeScanner();
       return;
     }
     setScannerOpen(true);
@@ -460,7 +458,6 @@ export default function SalesPage() {
             ) : null}
           </div>
           <button
-            ref={scanToggleRef}
             className={`sales-scan-button${scannerOpen ? ' is-active' : ''}`}
             type="button"
             aria-expanded={scannerOpen}
