@@ -4,6 +4,7 @@ export interface PurchaseDraftLine {
   productId: string;
   quantity: number;
   unitCost: number;
+  salePrice?: number;
   historicalSku?: string;
   historicalName?: string;
 }
@@ -34,6 +35,10 @@ function isFiniteNonNegative(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value) && value >= 0;
 }
 
+function optionalFiniteNonNegative(value: unknown): value is number | undefined {
+  return typeof value === 'undefined' || isFiniteNonNegative(value);
+}
+
 function optionalString(value: unknown): value is string | undefined {
   return typeof value === 'undefined' || typeof value === 'string';
 }
@@ -56,12 +61,14 @@ export function parsePurchaseDraft(raw: string | null): PurchaseDraft | null {
       if (!isPlainObject(line)) return null;
       if (typeof line.productId !== 'string') return null;
       if (!isFiniteNonNegative(line.quantity) || !isFiniteNonNegative(line.unitCost)) return null;
+      if (!optionalFiniteNonNegative(line.salePrice)) return null;
       if (!optionalString(line.historicalSku) || !optionalString(line.historicalName)) return null;
 
       lines.push({
         productId: line.productId,
         quantity: line.quantity,
         unitCost: line.unitCost,
+        ...(typeof line.salePrice === 'number' ? { salePrice: line.salePrice } : {}),
         ...(typeof line.historicalSku === 'string' ? { historicalSku: line.historicalSku } : {}),
         ...(typeof line.historicalName === 'string' ? { historicalName: line.historicalName } : {}),
       });
@@ -124,7 +131,8 @@ export function isMeaningfulPurchaseDraft(draft: PurchaseDraft): boolean {
     || line.historicalSku?.trim()
     || line.historicalName?.trim()
     || line.quantity !== 1
-    || line.unitCost !== 0,
+    || line.unitCost !== 0
+    || (typeof line.salePrice === 'number' && line.salePrice !== 0),
   );
 }
 

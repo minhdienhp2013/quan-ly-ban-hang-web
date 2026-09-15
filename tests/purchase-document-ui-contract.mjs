@@ -227,14 +227,18 @@ test('UX blocker regression: mobile chevron stays in card grid and long SKU wrap
   assert.match(css, /\.purchase-detail-mobile-items article>div strong\{min-width:0;overflow-wrap:anywhere\}/);
 });
 
-test('UX blocker regression: editor leaves unsafe five-column minimum layout by 1100px', () => {
+test('UX blocker regression: editor reflows from its actual container width instead of viewport-only minimums', () => {
   const css = fs.readFileSync('src/modules/purchases/purchases.css', 'utf8');
-  const tablet = css.slice(css.indexOf('@media(max-width:1100px)'), css.indexOf('@media(max-width:900px)'));
-  assert.match(tablet, /\.purchase-editor-line--header\{display:none\}/);
-  assert.match(tablet, /\.purchase-editor-line\{grid-template-columns:minmax\(0,1fr\) minmax\(110px,.45fr\) minmax\(125px,.5fr\) 44px\}/);
-  assert.match(tablet, /\.purchase-editor-line>label:first-child\{grid-column:1\/-1\}/);
-  assert.match(tablet, /\.purchase-mobile-label\{display:block/);
-  assert.doesNotMatch(tablet, /minmax\(200px|100px 120px 130px 40px/);
+  assert.match(css, /\.purchase-editor\{padding:18px;container-type:inline-size\}/);
+  const medium = css.slice(css.indexOf('@container(max-width:900px)'), css.indexOf('@container(max-width:620px)'));
+  assert.match(medium, /\.purchase-editor-line--header\{display:none\}/);
+  assert.match(medium, /\.purchase-editor-line\{grid-template-columns:repeat\(4,minmax\(0,1fr\)\) 44px\}/);
+  assert.match(medium, /\.purchase-editor-product-field\{grid-column:1\/-1\}/);
+  assert.match(medium, /\.purchase-mobile-label\{display:block/);
+  const narrow = css.slice(css.indexOf('@container(max-width:620px)'), css.indexOf('@media(max-width:1100px)'));
+  assert.match(narrow, /\.purchase-editor-line\{grid-template-columns:repeat\(2,minmax\(0,1fr\)\)\}/);
+  const viewport1100 = css.slice(css.indexOf('@media(max-width:1100px)'), css.indexOf('@media(max-width:900px)'));
+  assert.doesNotMatch(viewport1100, /\.purchase-editor-line\{grid-template-columns:/);
 });
 
 test('important Purchase controls keep approximately 44px touch targets', () => {
