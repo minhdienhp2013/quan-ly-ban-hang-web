@@ -11,6 +11,7 @@ import PurchaseTable from './PurchaseTable';
 import PurchaseToolbar from './PurchaseToolbar';
 import {
   clearPurchaseDraft,
+  guardPurchaseDraftReplacement,
   loadPurchaseDraft,
   type PurchaseDraft,
 } from './purchaseDraft';
@@ -187,6 +188,9 @@ export default function PurchasesPage() {
   function closeDetail() { setSelectedPurchaseId(null); }
 
   function openCreate(source: Purchase | null = null) {
+    const uid = appUser?.uid ?? '';
+    if (uid && !guardPurchaseDraftReplacement(uid, (message) => window.confirm(message))) return;
+
     setError(null); setNotice(null); setSelectedPurchaseId(null);
     setEditorSession({ key: Date.now(), source, draft: null });
     window.scrollTo({ top: 0, behavior: 'smooth' });
