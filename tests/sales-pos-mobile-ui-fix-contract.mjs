@@ -9,7 +9,7 @@ const read = (relativePath) => fs.readFileSync(path.join(root, relativePath), 'u
 test('POS/history transitions and scanner close paths restore deliberate focus', () => {
   const page = read('src/modules/sales/SalesPage.tsx');
 
-  assert.match(page, /const scanToggleRef = useRef<HTMLButtonElement>\(null\)/);
+  assert.doesNotMatch(page, /const scanToggleRef = useRef<HTMLButtonElement>\(null\)/);
   assert.match(page, /const historyBackButtonRef = useRef<HTMLButtonElement>\(null\)/);
   assert.match(page, /function openHistory\(\)[\s\S]*?setView\('history'\)[\s\S]*?historyBackButtonRef\.current\?\.focus\(\)/);
   assert.match(page, /function returnToPos\(\)[\s\S]*?setView\('pos'\)[\s\S]*?searchInputRef\.current\?\.focus\(\)/);
@@ -17,9 +17,11 @@ test('POS/history transitions and scanner close paths restore deliberate focus',
   assert.match(page, /onClick=\{openHistory\}>Xem toàn bộ<\/button>/);
 
   assert.match(page, /function closeScanner\(\)[\s\S]*?setScannerOpen\(false\)[\s\S]*?searchInputRef\.current\?\.focus\(\)/);
-  assert.match(page, /function toggleScanner\(\)[\s\S]*?if \(scannerOpen\)[\s\S]*?setScannerOpen\(false\)[\s\S]*?scanToggleRef\.current\?\.focus\(\)/);
-  assert.match(page, /ref=\{scanToggleRef\}[\s\S]*?onClick=\{toggleScanner\}/);
+  assert.match(page, /function toggleScanner\(\)[\s\S]*?if \(scannerOpen\)[\s\S]*?closeScanner\(\)[\s\S]*?return;/);
+  assert.doesNotMatch(page, /scanToggleRef\.current\?\.focus\(\)/);
+  assert.match(page, /className=\{`sales-scan-button[\s\S]*?onClick=\{toggleScanner\}/);
   assert.match(page, /onClick=\{closeScanner\}>Đóng<\/button>/);
+  assert.match(page, /function handleCameraScan\([\s\S]*?closeScanner\(\)/);
 });
 
 test('reviewed POS touch targets are at least 44px through the loaded override layer', () => {
