@@ -60,23 +60,59 @@ test('Settings route stays owner-only and is the only settings surface for reset
   assert.match(settings, /<BusinessDataResetPanel actorUid=\{appUser\.uid\} \/>/);
 });
 
+test('final warning states irreversible UI behavior without promising backup restore', () => {
+  const panel = read('src/modules/backup/BusinessDataResetPanel.tsx');
+  assert.match(panel, /xóa vĩnh viễn toàn bộ hàng hóa và lịch sử giao dịch/);
+  assert.match(panel, /Không thể hoàn tác bằng giao diện hiện tại/);
+  assert.match(panel, /phục hồi tự động từ file backup hiện chưa được hỗ trợ/);
+  assert.doesNotMatch(panel, /Không thể hoàn tác nếu không có bản backup/);
+});
+
 test('danger-zone UI requires exact phrase, final confirmation, prevents double submit and never reports success before reset resolves', () => {
   const panel = read('src/modules/backup/BusinessDataResetPanel.tsx');
   const handlerStart = panel.indexOf('async function handleReset');
   const handlerEnd = panel.indexOf('return (', handlerStart);
   const handler = panel.slice(handlerStart, handlerEnd);
+  const buttonStart = panel.indexOf('<button\n          ref={resetButtonRef}');
+  const buttonEnd = panel.indexOf('</button>', buttonStart);
+  const button = panel.slice(buttonStart, buttonEnd);
 
   assert.match(panel, /BUSINESS_DATA_RESET_DELETE_NODES\.map/);
   assert.match(panel, /BUSINESS_DATA_RESET_RETAINED_NODES\.map/);
   assert.match(panel, /isBusinessDataResetConfirmation\(confirmation\)/);
-  assert.match(panel, /disabled=\{busy \|\| !phraseMatches\}/);
-  assert.match(handler, /if \(busy \|\| !phraseMatches\) return/);
+  assert.match(button, /aria-disabled=\{busy \|\| !phraseMatches\}/);
+  assert.match(button, /aria-busy=\{busy\}/);
+  assert.doesNotMatch(button, /\sdisabled=/);
+  assert.match(handler, /if \(busy \|\| runningRef\.current \|\| !phraseMatches\) return/);
+  assert.match(handler, /runningRef\.current = true/);
+  assert.match(handler, /runningRef\.current = false/);
   assert.match(handler, /window\.confirm\(FINAL_WARNING\)/);
-  assert.match(handler, /if \(!confirmed\) return/);
-  assert.ok(handler.indexOf('if (!confirmed) return') < handler.indexOf('resetBusinessData('));
+  assert.ok(handler.indexOf('if (!confirmed)') < handler.indexOf('resetBusinessData('));
+  assert.ok(handler.indexOf('runningRef.current = true') < handler.indexOf('setBusy(true)'));
   assert.ok(handler.indexOf('await resetBusinessData(') < handler.indexOf("setSuccess('Đã xóa toàn bộ dữ liệu hàng hóa và giao dịch.')"));
   assert.match(panel, /Đã tạo bản sao lưu trước khi xóa\./);
-  assert.match(panel, /Không thể hoàn tác nếu không có bản backup/);
+});
+
+test('cancel, error and success paths have deliberate focus destinations', () => {
+  const panel = read('src/modules/backup/BusinessDataResetPanel.tsx');
+  const handlerStart = panel.indexOf('async function handleReset');
+  const handlerEnd = panel.indexOf('return (', handlerStart);
+  const handler = panel.slice(handlerStart, handlerEnd);
+  const cancelStart = handler.indexOf('if (!confirmed)');
+  const cancelEnd = handler.indexOf('runningRef.current = true', cancelStart);
+  const cancelBlock = handler.slice(cancelStart, cancelEnd);
+  const finallyStart = handler.indexOf('finally {');
+  const finallyBlock = handler.slice(finallyStart);
+
+  assert.match(panel, /const resetButtonRef = useRef<HTMLButtonElement>\(null\)/);
+  assert.match(panel, /const successRef = useRef<HTMLParagraphElement>\(null\)/);
+  assert.match(cancelBlock, /requestAnimationFrame\(\(\) => resetButtonRef\.current\?\.focus\(\)\)/);
+  assert.doesNotMatch(cancelBlock, /resetBusinessData\(/);
+  assert.match(finallyBlock, /if \(!completed\)/);
+  assert.match(finallyBlock, /requestAnimationFrame\(\(\) => resetButtonRef\.current\?\.focus\(\)\)/);
+  assert.match(panel, /successRef\.current\?\.focus\(\)/);
+  assert.match(panel, /setFocusSuccess\(true\)/);
+  assert.match(panel, /<p ref=\{successRef\} className="form-success" role="status" tabIndex=\{-1\}>/);
 });
 
 test('service validates OWNER, acquires lock, backs up before destructive write and uses one final multi-location update', () => {
@@ -113,7 +149,7 @@ test('backup failure/cancel/error paths cannot enter destructive update or repor
   assert.match(service, /onDisconnect/);
 
   const handler = panel.slice(panel.indexOf('async function handleReset'), panel.indexOf('return (', panel.indexOf('async function handleReset')));
-  assert.ok(handler.indexOf('if (!confirmed) return') < handler.indexOf('setBusy(true)'));
+  assert.ok(handler.indexOf('if (!confirmed)') < handler.indexOf('setBusy(true)'));
   assert.match(handler, /setSuccess\(''\)/);
   assert.ok(handler.indexOf("setSuccess('')") < handler.indexOf('await resetBusinessData('));
   assert.ok(handler.lastIndexOf('setError(') > handler.indexOf('await resetBusinessData('));
