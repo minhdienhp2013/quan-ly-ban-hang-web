@@ -27,8 +27,23 @@ export default function GoodsResponsiveList({
         const stockStatus = getGoodsStockStatus(product);
         return (
           <article className={`goods-product-card${!product.active ? ' goods-product-card--inactive' : ''}`} key={product.id}>
-            <div className="goods-product-card__top">
-              <label className="goods-card-check">
+            <div
+              className="goods-product-card__top"
+              style={{ gridTemplateColumns: 'auto minmax(0,1fr) auto' }}
+            >
+              <label
+                className="goods-card-check"
+                style={{
+                  display: 'flex',
+                  width: 44,
+                  minWidth: 44,
+                  height: 44,
+                  padding: 0,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer',
+                }}
+              >
                 <input type="checkbox" checked={selectedIds.has(product.id)} onChange={() => onToggleProduct(product.id)} />
                 <span className="sr-only">Chọn {product.name}</span>
               </label>
