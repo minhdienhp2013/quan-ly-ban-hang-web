@@ -60,7 +60,8 @@ export function buildPurchaseExcelNewProductConsensus(
   if (sku.error || !sku.value) return { input: null, error: sku.error || 'Không xác định được Mã hàng mới.' };
 
   const name = uniqueText(group.map((row) => row.name), normalizeName, 'Tên hàng');
-  if (name.error || !name.value) return { input: null, error: name.error || 'Thiếu Tên hàng.' };
+  if (name.error) return { input: null, error: 'Hai hàng mới khác tên cùng Mã hàng.' };
+  if (!name.value) return { input: null, error: 'Thiếu Tên hàng.' };
 
   const barcode = uniqueText(group.map((row) => row.sourceBarcode), normalizeSearchCode, 'Barcode');
   if (barcode.error) return { input: null, error: barcode.error };
@@ -72,9 +73,8 @@ export function buildPurchaseExcelNewProductConsensus(
   if (unit.error) return { input: null, error: unit.error };
 
   const unitCost = uniqueNumber(group.map((row) => row.unitCost), 'Giá nhập');
-  if (unitCost.error || typeof unitCost.value !== 'number') {
-    return { input: null, error: unitCost.error || 'Thiếu Giá nhập hợp lệ.' };
-  }
+  if (unitCost.error) return { input: null, error: 'Cùng sản phẩm dự kiến nhưng Giá nhập khác nhau; không tự average.' };
+  if (typeof unitCost.value !== 'number') return { input: null, error: 'Thiếu Giá nhập hợp lệ.' };
 
   const salePrice = uniqueNumber(group.map((row) => row.salePrice), 'Giá bán');
   if (salePrice.error) return { input: null, error: salePrice.error };
