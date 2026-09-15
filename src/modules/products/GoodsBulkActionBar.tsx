@@ -53,7 +53,7 @@ export default function GoodsBulkActionBar({
               style={{ color: '#b42318', borderColor: '#e6a2a2', background: '#fff1f1', opacity: busy ? 0.65 : 1 }}
               type="button"
               onClick={onPermanentDelete}
-              aria-disabled={busy}
+              aria-disabled={busy ? 'true' : 'false'}
               aria-busy={deleting}
             >
               {deleting ? 'Đang kiểm tra/xóa...' : 'Xóa vĩnh viễn đã chọn'}
