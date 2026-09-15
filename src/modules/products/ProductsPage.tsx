@@ -16,6 +16,7 @@ import ProductScanDialog from './ProductScanDialog';
 import { deactivateSelectedProducts } from './productBulkActions';
 import { exportProductsToExcel } from './productExcelExport';
 import { productToFormState } from './productFormModel';
+import type { ProductPermanentDeleteBlocker } from './productPermanentDelete';
 import {
   computeGoodsStats,
   filterGoodsProducts,
@@ -24,6 +25,8 @@ import {
 } from './goodsViewModel';
 import {
   createProduct,
+  deleteProductsPermanently,
+  preflightPermanentProductDeletion,
   setProductActive,
   subscribeProducts,
   updateProduct,
@@ -51,6 +54,8 @@ export default function ProductsPage() {
   const [saving, setSaving] = useState(false);
   const [changingStatusId, setChangingStatusId] = useState<string | null>(null);
   const [bulkDeactivating, setBulkDeactivating] = useState(false);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [deleteBlockers, setDeleteBlockers] = useState<ProductPermanentDeleteBlocker[]>([]);
 
   useEffect(() => {
     setLoading(true);
@@ -177,6 +182,7 @@ export default function ProductsPage() {
   }
 
   function toggleProductSelection(productId: string) {
+    setDeleteBlockers([]);
     setSelectedProductIds((current) => {
       const next = new Set(current);
       if (next.has(productId)) next.delete(productId);
@@ -186,6 +192,7 @@ export default function ProductsPage() {
   }
 
   function toggleAllVisible() {
+    setDeleteBlockers([]);
     setSelectedProductIds((current) => {
       const next = new Set(current);
       const allVisibleSelected = filteredProducts.length > 0 && filteredProducts.every((product) => next.has(product.id));
@@ -213,7 +220,7 @@ export default function ProductsPage() {
   }
 
   async function handleBulkDeactivate() {
-    if (appUser?.role !== 'owner' || bulkDeactivating || selectedProducts.length === 0) return;
+    if (appUser?.role !== 'owner' || bulkDeactivating || bulkDeleting || selectedProducts.length === 0) return;
 
     const confirmed = window.confirm(
       `Bạn đang chuẩn bị ngừng kinh doanh ${selectedProducts.length} sản phẩm.\n\n` +
@@ -225,6 +232,7 @@ export default function ProductsPage() {
     setBulkDeactivating(true);
     setSearchNotice(null);
     setLoadError(null);
+    setDeleteBlockers([]);
     try {
       const result = await deactivateSelectedProducts(
         selectedProducts,
@@ -243,6 +251,50 @@ export default function ProductsPage() {
       setLoadError(error instanceof Error ? error.message : 'Không thể ngừng kinh doanh các sản phẩm đã chọn.');
     } finally {
       setBulkDeactivating(false);
+    }
+  }
+
+  async function handlePermanentDelete() {
+    if (appUser?.role !== 'owner' || bulkDeleting || bulkDeactivating || selectedProducts.length === 0) return;
+
+    setBulkDeleting(true);
+    setSearchNotice(null);
+    setLoadError(null);
+    setDeleteBlockers([]);
+
+    try {
+      const preflight = await preflightPermanentProductDeletion(selectedProducts);
+      if (!preflight.canDeleteAll) {
+        setDeleteBlockers(preflight.blockers);
+        setSearchNotice(
+          `Đã chặn ${preflight.blockers.length}/${preflight.selected} sản phẩm. Không xóa sản phẩm nào. ` +
+          'Hãy bỏ chọn sản phẩm bị chặn rồi thử lại.',
+        );
+        return;
+      }
+
+      const confirmed = window.confirm(
+        `Bạn đang xóa vĩnh viễn ${preflight.selected} sản phẩm.\nThao tác này không thể hoàn tác.`,
+      );
+      if (!confirmed) return;
+
+      const result = await deleteProductsPermanently(preflight.eligibleProducts, appUser.uid);
+      if (!result.preflight.canDeleteAll) {
+        setDeleteBlockers(result.preflight.blockers);
+        setSearchNotice(
+          `Điều kiện xóa đã thay đổi. Đã chặn ${result.preflight.blockers.length}/${result.preflight.selected} sản phẩm. ` +
+          'Không xóa sản phẩm nào.',
+        );
+        return;
+      }
+
+      const deletedIds = new Set(result.preflight.eligibleProducts.map((product) => product.id));
+      setSelectedProductIds((current) => new Set([...current].filter((id) => !deletedIds.has(id))));
+      setSearchNotice(`Đã xóa vĩnh viễn ${result.deleted} sản phẩm.`);
+    } catch (error) {
+      setLoadError(error instanceof Error ? error.message : 'Không thể xóa vĩnh viễn các sản phẩm đã chọn.');
+    } finally {
+      setBulkDeleting(false);
     }
   }
 
@@ -324,11 +376,30 @@ export default function ProductsPage() {
           <GoodsBulkActionBar
             count={selectedProducts.length}
             showDeactivate={appUser?.role === 'owner'}
+            showPermanentDelete={appUser?.role === 'owner'}
             deactivating={bulkDeactivating}
+            deleting={bulkDeleting}
             onPrint={() => printProducts(selectedProducts)}
             onDeactivate={() => void handleBulkDeactivate()}
-            onClear={() => setSelectedProductIds(new Set())}
+            onPermanentDelete={() => void handlePermanentDelete()}
+            onClear={() => {
+              setSelectedProductIds(new Set());
+              setDeleteBlockers([]);
+            }}
           />
+
+          {deleteBlockers.length > 0 ? (
+            <div className="form-error" role="alert" style={{ margin: 12, padding: 12, border: '1px solid #e6a2a2', borderRadius: 10, background: '#fff6f6' }}>
+              <strong>{deleteBlockers.length} sản phẩm không đủ điều kiện xóa. Không xóa sản phẩm nào.</strong>
+              <ul>
+                {deleteBlockers.map((blocker) => (
+                  <li key={blocker.productId}>
+                    <strong>{blocker.sku} - {blocker.name}</strong>: {blocker.reasons.join(' ')}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
 
           {loading ? (
             <div className="goods-empty">Đang tải hàng hóa...</div>
