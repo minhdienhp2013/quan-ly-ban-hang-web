@@ -7,6 +7,7 @@ export interface PurchaseLineInput {
   productId: string;
   quantity: number;
   unitCost: number;
+  salePrice: number;
 }
 
 export interface CreatePurchaseInput {
@@ -38,6 +39,7 @@ function validateLines(items: PurchaseLineInput[]) {
     seen.add(item.productId);
     if (!Number.isFinite(item.quantity) || item.quantity <= 0) throw new Error('Số lượng nhập phải lớn hơn 0.');
     if (!Number.isFinite(item.unitCost) || item.unitCost < 0) throw new Error('Giá nhập không hợp lệ.');
+    if (!Number.isFinite(item.salePrice) || item.salePrice < 0) throw new Error('Giá bán không hợp lệ.');
   }
 }
 
@@ -78,7 +80,12 @@ export async function createPurchase(input: CreatePurchaseInput, actorUid: strin
   };
 
   const productFieldUpdates: Record<string, Record<string, unknown>> = {};
-  for (const item of items) productFieldUpdates[item.productId] = { costPrice: item.unitCost };
+  items.forEach((item, index) => {
+    productFieldUpdates[item.productId] = {
+      costPrice: item.unitCost,
+      salePrice: Math.round(input.items[index].salePrice),
+    };
+  });
 
   await commitStockOperation({
     type: 'PURCHASE',
