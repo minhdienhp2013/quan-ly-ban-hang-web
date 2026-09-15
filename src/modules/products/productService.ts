@@ -1,6 +1,11 @@
-import { onValue, push, ref, update, type Unsubscribe } from 'firebase/database';
+import { get, onValue, push, ref, update, type Unsubscribe } from 'firebase/database';
 import { db } from '../../firebase/client';
 import type { AuditLog, Product } from '../../types/models';
+import {
+  buildProductPermanentDeletePreflight,
+  type ProductPermanentDeletePreflight,
+  type ProductReferenceSnapshots,
+} from './productPermanentDelete';
 
 export interface ProductInput {
   sku: string;
@@ -211,4 +216,70 @@ export async function setProductActive(
     [`products/${product.id}/updatedAt`]: now,
     [`auditLogs/${auditKey}`]: auditLog,
   });
+}
+
+async function readPermanentDeletePreflight(
+  selectedProducts: readonly Product[],
+): Promise<ProductPermanentDeletePreflight> {
+  const database = requireDatabase();
+  const [productsSnapshot, salesSnapshot, purchasesSnapshot, stockOutsSnapshot, movementsSnapshot, stocktakesSnapshot] = await Promise.all([
+    get(ref(database, 'products')),
+    get(ref(database, 'sales')),
+    get(ref(database, 'purchases')),
+    get(ref(database, 'stockOuts')),
+    get(ref(database, 'stockMovements')),
+    get(ref(database, 'stocktakes')),
+  ]);
+
+  const rawProducts = (productsSnapshot.val() ?? {}) as Record<string, Product>;
+  const currentProducts = Object.entries(rawProducts).map(([id, product]) => ({ ...product, id: product.id || id }));
+  const references: ProductReferenceSnapshots = {
+    sales: salesSnapshot.val(),
+    purchases: purchasesSnapshot.val(),
+    stockOuts: stockOutsSnapshot.val(),
+    stockMovements: movementsSnapshot.val(),
+    stocktakes: stocktakesSnapshot.val(),
+  };
+
+  return buildProductPermanentDeletePreflight(selectedProducts, currentProducts, references);
+}
+
+export async function preflightPermanentProductDeletion(
+  selectedProducts: readonly Product[],
+): Promise<ProductPermanentDeletePreflight> {
+  return readPermanentDeletePreflight(selectedProducts);
+}
+
+export async function deleteProductsPermanently(
+  selectedProducts: readonly Product[],
+  actorUid: string,
+): Promise<{ deleted: number; preflight: ProductPermanentDeletePreflight }> {
+  if (!actorUid) throw new Error('Không thể xác định người dùng xóa sản phẩm.');
+
+  // Revalidate immediately before the destructive write so stale UI/preflight data
+  // cannot silently turn into a partial or unsafe delete.
+  const preflight = await readPermanentDeletePreflight(selectedProducts);
+  if (!preflight.canDeleteAll) return { deleted: 0, preflight };
+
+  const database = requireDatabase();
+  const now = Date.now();
+  const updates: Record<string, unknown> = {};
+
+  for (const product of preflight.eligibleProducts) {
+    const auditKey = push(ref(database, 'auditLogs')).key;
+    if (!auditKey) throw new Error('Không thể tạo nhật ký xóa sản phẩm.');
+    const audit = buildAuditLog(
+      auditKey,
+      actorUid,
+      'PRODUCT_DELETED',
+      product.id,
+      `Xóa vĩnh viễn sản phẩm ${product.sku} - ${product.name}`,
+      now,
+    );
+    updates[`products/${product.id}`] = null;
+    updates[`auditLogs/${auditKey}`] = audit;
+  }
+
+  await update(ref(database), updates);
+  return { deleted: preflight.eligibleProducts.length, preflight };
 }
