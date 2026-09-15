@@ -12,7 +12,7 @@
     },
     "businessDataResetLock": {
       ".read": "auth != null && root.child('users').child(auth.uid).child('active').val() === true && root.child('users').child(auth.uid).child('role').val() === 'owner'",
-      ".write": "auth != null && root.child('users').child(auth.uid).child('active').val() === true && root.child('users').child(auth.uid).child('role').val() === 'owner' && ((!data.exists() && newData.exists() && newData.child('actorUid').val() === auth.uid && !root.child('productDeletionLocks').exists()) || (data.exists() && data.child('actorUid').val() === auth.uid && !newData.exists()))",
+      ".write": "auth != null && root.child('users').child(auth.uid).child('active').val() === true && root.child('users').child(auth.uid).child('role').val() === 'owner' && ((!data.exists() && newData.exists() && newData.child('actorUid').val() === auth.uid && !root.child('productDeletionLocks').exists()) || (!newData.exists() && (!data.exists() || data.child('actorUid').val() === auth.uid)))",
       ".validate": "newData.hasChildren(['actorUid', 'createdAt']) && newData.child('actorUid').val() === auth.uid && newData.child('createdAt').isNumber()"
     },
     "products": {
