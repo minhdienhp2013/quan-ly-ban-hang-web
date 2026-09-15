@@ -1,0 +1,125 @@
+.settings-shell {
+  display: grid;
+  gap: 20px;
+}
+
+.settings-header,
+.settings-danger-heading {
+  display: grid;
+  gap: 6px;
+}
+
+.settings-header h1,
+.settings-danger-heading h2,
+.danger-zone h2,
+.danger-zone h3,
+.danger-zone p {
+  margin: 0;
+}
+
+.settings-danger-heading {
+  margin-top: 8px;
+}
+
+.danger-zone {
+  border: 2px solid #b42318;
+  border-radius: 14px;
+  background: #fff7f6;
+  padding: 18px;
+  display: grid;
+  gap: 18px;
+}
+
+.danger-zone__heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.danger-zone__heading p {
+  margin-top: 8px;
+  max-width: 760px;
+}
+
+.danger-zone__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.danger-zone__grid > div {
+  min-width: 0;
+  border: 1px solid #e6b5b0;
+  border-radius: 12px;
+  background: #fff;
+  padding: 14px;
+}
+
+.danger-zone__grid ul {
+  margin: 10px 0 0;
+  padding-left: 22px;
+  overflow-wrap: anywhere;
+}
+
+.danger-zone__confirmation {
+  display: grid;
+  gap: 10px;
+  max-width: 720px;
+}
+
+.danger-zone__confirmation label {
+  line-height: 1.45;
+}
+
+.danger-zone__confirmation input {
+  min-height: 44px;
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid #c9c9c9;
+  border-radius: 10px;
+  padding: 10px 12px;
+  font: inherit;
+}
+
+.danger-zone__confirmation input:focus-visible,
+.danger-zone__button:focus-visible {
+  outline: 3px solid currentColor;
+  outline-offset: 2px;
+}
+
+.danger-zone__button {
+  min-height: 48px;
+  justify-self: start;
+  border-color: #b42318;
+  background: #b42318;
+  color: #fff;
+}
+
+.danger-zone__button:hover:not([aria-disabled='true']) {
+  background: #8f1c14;
+}
+
+.danger-zone__button[aria-disabled='true'] {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.danger-zone__note {
+  color: #6b2b26;
+  font-size: 0.92rem;
+  line-height: 1.5;
+}
+
+@media (max-width: 720px) {
+  .danger-zone {
+    padding: 14px;
+  }
+
+  .danger-zone__grid {
+    grid-template-columns: 1fr;
+  }
+
+  .danger-zone__button {
+    width: 100%;
+  }
+}

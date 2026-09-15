@@ -12,6 +12,7 @@ import PurchasesPage from './modules/purchases/PurchasesPage';
 import QrPrintingPage from './modules/qr/QrPrintingPage';
 import ReportsPage from './modules/reports/ReportsPage';
 import SalesPage from './modules/sales/SalesPage';
+import SettingsPage from './modules/settings/SettingsPage';
 import StockOutPage from './modules/stockout/StockOutPage';
 import StocktakePage from './modules/stocktake/StocktakePage';
 import SuppliersPage from './modules/suppliers/SuppliersPage';
@@ -21,7 +22,6 @@ import ModulePlaceholderPage from './pages/ModulePlaceholderPage';
 
 const modulePages = {
   users: ['Người dùng', 'Quản lý nhân viên, trạng thái tài khoản và quyền truy cập.'],
-  settings: ['Cài đặt', 'Thông tin cửa hàng và cấu hình mặc định của hệ thống.'],
 } as const;
 
 export default function App() {
@@ -48,7 +48,7 @@ export default function App() {
                 <Route path="expenses" element={<ExpensesPage />} />
                 <Route path="reports" element={<ReportsPage />} />
                 <Route path="users" element={<ModulePlaceholderPage title={modulePages.users[0]} description={modulePages.users[1]} />} />
-                <Route path="settings" element={<ModulePlaceholderPage title={modulePages.settings[0]} description={modulePages.settings[1]} />} />
+                <Route path="settings" element={<SettingsPage />} />
               </Route>
             </Route>
           </Route>

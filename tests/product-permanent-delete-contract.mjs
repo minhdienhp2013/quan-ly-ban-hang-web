@@ -229,16 +229,21 @@ test('Product create/edit/active semantics remain present and Inventory CAS rema
   assert.match(inventory, /stockOperations\/\$\{operationId\}/);
 });
 
-test('Firebase rules gate delete with own lock and block references/Product writes while locked', () => {
+test('Firebase rules gate permanent Product delete while global reset parent grant stays reset-only', () => {
   const rules = JSON.parse(read('database.rules.json')).rules;
+  const parentProductWrite = rules.products['.write'];
   const productWrite = rules.products.$productId['.write'];
   const lockWrite = rules.productDeletionLocks.$productId['.write'];
-  assert.equal(rules.products['.write'], undefined);
+  assert.match(parentProductWrite, /businessDataResetLock/);
+  assert.match(parentProductWrite, /role'\)\.val\(\) === 'owner'/);
+  assert.match(parentProductWrite, /!newData\.exists\(\)/);
+  assert.match(productWrite, /!root\.child\('businessDataResetLock'\)\.exists\(\)/);
   assert.match(productWrite, /productDeletionLocks/);
   assert.match(productWrite, /actorUid'\)\.val\(\) === auth\.uid/);
   assert.match(productWrite, /stockQuantity/);
   assert.match(productWrite, /stockVersion/);
   assert.match(productWrite, /data\.child\('id'\)/);
+  assert.match(lockWrite, /!root\.child\('businessDataResetLock'\)\.exists\(\)/);
   assert.match(lockWrite, /!data\.exists\(\)/);
   assert.match(lockWrite, /root\.child\('products'\)/);
   assert.match(lockWrite, /root\.child\('products'\).*child\('id'\)/);
