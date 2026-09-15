@@ -34,7 +34,7 @@ function uniqueText(
   return { value: deterministicText(originals), error: '' };
 }
 
-function uniqueNumber(values: readonly Array<number | null | undefined>, fieldLabel: string) {
+function uniqueNumber(values: ReadonlyArray<number | null | undefined>, fieldLabel: string) {
   const provided = values.filter((value): value is number => typeof value === 'number' && Number.isFinite(value));
   const distinct = new Set(provided);
   if (distinct.size > 1) {
