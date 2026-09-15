@@ -3,6 +3,7 @@ import type { Product } from '../../types/models';
 import { normalizeSearchCode, prepareSearchCandidate } from '../../shared/search/searchNormalization';
 import { generateLegacyProductCode } from '../products/productLegacyCode';
 import type { ProductInput } from '../products/productService';
+import { buildPurchaseExcelNewProductConsensus } from './purchaseExcelImportNewProduct';
 
 export type PurchaseExcelRowStatus = 'MATCHED' | 'NEW' | 'REVIEW' | 'ERROR';
 
@@ -231,6 +232,28 @@ function errorRow(
   return { ...base, status: 'ERROR', message };
 }
 
+function newRow(
+  base: Omit<PurchaseExcelImportRow, 'status' | 'message'>,
+  effectiveSku: string,
+  message: string,
+): PurchaseExcelImportRow {
+  const candidate: PurchaseExcelImportRow = {
+    ...base,
+    status: 'NEW',
+    message,
+    effectiveSku,
+  };
+  const consensus = buildPurchaseExcelNewProductConsensus([candidate]);
+  if (!consensus.input) return reviewRow({ ...base, effectiveSku }, consensus.error ?? 'Không thể dựng Product mới an toàn.');
+  return { ...candidate, newProductInput: consensus.input };
+}
+
+function productIdentifierValue(product: Product, label: 'SKU' | 'Barcode' | 'QR') {
+  if (label === 'SKU') return product.sku;
+  if (label === 'Barcode') return product.barcode;
+  return product.qrCode;
+}
+
 function buildInitialRows(sheet: WorkSheet, headerRowIndex: number, headers: HeaderIndexes, products: readonly Product[]) {
   const range = utils.decode_range(sheet['!ref'] ?? 'A1:A1');
   const skuIndex = buildIndex(products, (product) => product.sku);
@@ -286,27 +309,42 @@ function buildInitialRows(sheet: WorkSheet, headerRowIndex: number, headers: Hea
       continue;
     }
 
-    const identityProducts = new Map<string, Product>();
-    const ambiguousIdentities: string[] = [];
     const explicit = [
       ['SKU', skuResult.value, skuIndex] as const,
       ['Barcode', barcodeResult.value, barcodeIndex] as const,
       ['QR', qrResult.value, qrIndex] as const,
     ];
+    const hasExplicitIdentifier = explicit.some(([, value]) => Boolean(value));
+    const identityProducts = new Map<string, Product>();
+    const ambiguousIdentities: string[] = [];
     for (const [label, value, index] of explicit) {
       if (!value) continue;
       const matches = index.get(normalizeSearchCode(value)) ?? [];
       if (matches.length > 1) ambiguousIdentities.push(`${label} đang trùng nhiều Product`);
       for (const product of matches) identityProducts.set(product.id, product);
     }
+
     if (ambiguousIdentities.length > 0 || identityProducts.size > 1) {
       rows.push(reviewRow(base, ambiguousIdentities.length > 0
         ? `${ambiguousIdentities.join('; ')}. Cần kiểm tra dữ liệu danh mục.`
         : 'SKU/Barcode/QR trong dòng đang trỏ tới các Product khác nhau.'));
       continue;
     }
+
     if (identityProducts.size === 1) {
-      rows.push(matchedRow(base, [...identityProducts.values()][0], 'identity chính xác'));
+      const product = [...identityProducts.values()][0];
+      const mismatches = explicit
+        .filter(([, value]) => Boolean(value))
+        .filter(([label, value]) => normalizeSearchCode(productIdentifierValue(product, label)) !== normalizeSearchCode(value))
+        .map(([label]) => label);
+      if (mismatches.length > 0) {
+        rows.push(reviewRow(
+          base,
+          `Có identifier khớp Product “${product.name}” (${product.sku}) nhưng ${mismatches.join(', ')} được cung cấp không khớp Product đó. Cần kiểm tra.`,
+        ));
+      } else {
+        rows.push(matchedRow(base, product, 'identity chính xác'));
+      }
       continue;
     }
 
@@ -322,24 +360,60 @@ function buildInitialRows(sheet: WorkSheet, headerRowIndex: number, headers: Hea
       continue;
     }
 
-    if (!skuResult.value) {
-      const generatedMatches = skuIndex.get(normalizeSearchCode(generatedSku)) ?? [];
-      if (generatedMatches.length > 1) {
-        rows.push(reviewRow({ ...base, effectiveSku }, `Mã sinh “${generatedSku}” đang thuộc nhiều Product. Cần kiểm tra.`));
+    if (hasExplicitIdentifier) {
+      const skuCollision = skuIndex.get(normalizeSearchCode(effectiveSku)) ?? [];
+      if (skuCollision.length > 0) {
+        rows.push(reviewRow({ ...base, effectiveSku }, `Mã hàng “${effectiveSku}” đã thuộc Product hiện có. Cần kiểm tra.`));
         continue;
       }
-      if (generatedMatches.length === 1) {
-        const product = generatedMatches[0];
-        if (normalizeFullName(product.name) === normalizeFullName(name)) {
-          rows.push(matchedRow(base, product, 'mã legacy sinh từ tên'));
-        } else {
-          rows.push(reviewRow(
-            { ...base, effectiveSku },
-            `Mã sinh “${generatedSku}” đã thuộc Product “${product.name}” (${product.sku}) nhưng tên không trùng chính xác.`,
-          ));
-        }
+
+      const effectiveBarcode = barcodeResult.value || effectiveSku;
+      const barcodeCollision = barcodeIndex.get(normalizeSearchCode(effectiveBarcode)) ?? [];
+      if (barcodeCollision.length > 0) {
+        rows.push(reviewRow({ ...base, effectiveSku }, `Barcode dự kiến “${effectiveBarcode}” đã thuộc Product hiện có. Cần kiểm tra.`));
         continue;
       }
+
+      if (qrResult.value && (qrIndex.get(normalizeSearchCode(qrResult.value)) ?? []).length > 0) {
+        rows.push(reviewRow({ ...base, effectiveSku }, `QR “${qrResult.value}” đã thuộc Product hiện có. Cần kiểm tra.`));
+        continue;
+      }
+
+      const explicitNameMatches = nameIndex.get(normalizeFullName(name)) ?? [];
+      if (explicitNameMatches.length > 0) {
+        rows.push(reviewRow(
+          { ...base, effectiveSku },
+          'Có mã mới nhưng tên trùng Product hiện có — cần kiểm tra.',
+        ));
+        continue;
+      }
+
+      rows.push(newRow(
+        base,
+        effectiveSku,
+        skuResult.value
+          ? 'Hàng mới. Sẽ dùng Mã hàng trong Excel; Product chỉ được tạo sau khi xác nhận.'
+          : `Hàng mới. Mã legacy dự kiến: ${generatedSku}. Product chỉ được tạo sau khi xác nhận.`,
+      ));
+      continue;
+    }
+
+    const generatedMatches = skuIndex.get(normalizeSearchCode(generatedSku)) ?? [];
+    if (generatedMatches.length > 1) {
+      rows.push(reviewRow({ ...base, effectiveSku }, `Mã sinh “${generatedSku}” đang thuộc nhiều Product. Cần kiểm tra.`));
+      continue;
+    }
+    if (generatedMatches.length === 1) {
+      const product = generatedMatches[0];
+      if (normalizeFullName(product.name) === normalizeFullName(name)) {
+        rows.push(matchedRow(base, product, 'mã legacy sinh từ tên'));
+      } else {
+        rows.push(reviewRow(
+          { ...base, effectiveSku },
+          `Mã sinh “${generatedSku}” đã thuộc Product “${product.name}” (${product.sku}) nhưng tên không trùng chính xác.`,
+        ));
+      }
+      continue;
     }
 
     const fullNameMatches = nameIndex.get(normalizeFullName(name)) ?? [];
@@ -352,26 +426,17 @@ function buildInitialRows(sheet: WorkSheet, headerRowIndex: number, headers: Hea
       continue;
     }
 
-    const input: ProductInput = {
-      sku: effectiveSku,
-      name,
-      barcode: barcodeResult.value || effectiveSku,
-      qrCode: qrResult.value || undefined,
-      unit: unit || undefined,
-      costPrice: Math.round(unitCost ?? 0),
-      salePrice: Math.round(salePrice ?? 0),
-      minStock: typeof minStock === 'number' ? minStock : undefined,
-      active: true,
-    };
-    rows.push({
-      ...base,
-      status: 'NEW',
-      message: skuResult.value
-        ? 'Hàng mới. Sẽ dùng Mã hàng trong Excel; Product chỉ được tạo sau khi xác nhận.'
-        : `Hàng mới. Mã legacy dự kiến: ${generatedSku}. Product chỉ được tạo sau khi xác nhận.`,
+    const fallbackBarcode = effectiveSku;
+    if ((barcodeIndex.get(normalizeSearchCode(fallbackBarcode)) ?? []).length > 0) {
+      rows.push(reviewRow({ ...base, effectiveSku }, `Barcode fallback “${fallbackBarcode}” đã thuộc Product hiện có. Cần kiểm tra.`));
+      continue;
+    }
+
+    rows.push(newRow(
+      base,
       effectiveSku,
-      newProductInput: input,
-    });
+      `Hàng mới. Mã legacy dự kiến: ${generatedSku}. Product chỉ được tạo sau khi xác nhận.`,
+    ));
   }
 
   return rows;
@@ -396,21 +461,18 @@ function applyFileCollisionChecks(inputRows: PurchaseExcelImportRow[]) {
   }
 
   for (const [sku, group] of skuGroups) {
-    if (group.length < 2) continue;
-    const names = new Set(group.map((row) => normalizeFullName(row.name)));
-    const barcodes = new Set(group.map((row) => normalizeSearchCode(row.sourceBarcode)).filter(Boolean));
-    const qrs = new Set(group.map((row) => normalizeSearchCode(row.sourceQrCode)).filter(Boolean));
-    const costs = new Set(group.map((row) => row.unitCost));
-    if (names.size > 1) group.forEach((row) => addReview(row.rowNumber, `Hai hàng mới khác tên cùng Mã hàng “${sku}”.`));
-    if (barcodes.size > 1) group.forEach((row) => addReview(row.rowNumber, `Cùng Mã hàng “${sku}” nhưng Barcode khác nhau.`));
-    if (qrs.size > 1) group.forEach((row) => addReview(row.rowNumber, `Cùng Mã hàng “${sku}” nhưng QR khác nhau.`));
-    if (costs.size > 1) group.forEach((row) => addReview(row.rowNumber, `Cùng sản phẩm dự kiến nhưng Giá nhập khác nhau; không tự average.`));
+    const consensus = buildPurchaseExcelNewProductConsensus(group);
+    if (!consensus.input) {
+      group.forEach((row) => addReview(row.rowNumber, `${consensus.error ?? 'Metadata hàng mới không nhất quán'} Mã hàng “${sku}”.`));
+      continue;
+    }
+    for (const row of group) row.newProductInput = { ...consensus.input };
   }
 
-  for (const field of ['sourceBarcode', 'sourceQrCode'] as const) {
+  for (const field of ['barcode', 'qrCode'] as const) {
     const groups = new Map<string, PurchaseExcelImportRow[]>();
     for (const row of newRows) {
-      const value = normalizeSearchCode(row[field]);
+      const value = normalizeSearchCode(row.newProductInput?.[field]);
       if (!value) continue;
       const group = groups.get(value) ?? [];
       group.push(row);
@@ -419,7 +481,7 @@ function applyFileCollisionChecks(inputRows: PurchaseExcelImportRow[]) {
     for (const [value, group] of groups) {
       const skuKeys = new Set(group.map((row) => normalizeSearchCode(row.effectiveSku)));
       if (skuKeys.size > 1) {
-        const label = field === 'sourceBarcode' ? 'Barcode' : 'QR';
+        const label = field === 'barcode' ? 'Barcode' : 'QR';
         group.forEach((row) => addReview(row.rowNumber, `${label} “${value}” bị dùng cho nhiều hàng mới khác nhau.`));
       }
     }
