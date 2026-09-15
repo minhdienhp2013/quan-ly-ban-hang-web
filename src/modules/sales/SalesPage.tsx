@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type KeyboardEvent } from 'react';
 import { useAuth } from '../../auth/AuthContext';
+import VndMoneyInput from '../../shared/numeric/VndMoneyInput';
 import type { Customer, PaymentMethod, Product } from '../../types/models';
 import { subscribeProducts } from '../products/productService';
 import SaleHistoryPage from './SaleHistoryPage';
@@ -424,9 +425,9 @@ export default function SalesPage() {
                         <button type="button" aria-label={`Giảm số lượng ${product.name}`} onClick={() => setLineQuantity(product, line.quantity - 1)}>−</button>
                         <input
                           type="number"
-                          inputMode="decimal"
-                          min="0.001"
-                          step="0.001"
+                          inputMode="numeric"
+                          min="1"
+                          step="1"
                           max={Number(product.stockQuantity) || undefined}
                           value={line.quantity}
                           aria-label={`Số lượng ${product.name}`}
@@ -451,17 +452,11 @@ export default function SalesPage() {
                 {customerError && <small>Không tải được danh sách khách hàng; vẫn có thể bán cho khách lẻ.</small>}
               </label>
 
-              <label>
-                <span>Giảm giá đơn (VND)</span>
-                <input
-                  type="number"
-                  inputMode="numeric"
-                  min="0"
-                  step="1000"
-                  value={discount}
-                  onChange={(event) => setDiscount(Math.max(0, Math.round(event.currentTarget.valueAsNumber || 0)))}
-                />
-              </label>
+              <VndMoneyInput
+                label="Giảm giá đơn (VND)"
+                value={discount}
+                onChange={(value) => setDiscount(Math.max(0, Math.round(Number(value) || 0)))}
+              />
 
               <fieldset className="sales-payment-methods">
                 <legend>Phương thức thanh toán</legend>

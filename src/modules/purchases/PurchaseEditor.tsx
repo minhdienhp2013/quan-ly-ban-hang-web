@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
+import VndMoneyInput from '../../shared/numeric/VndMoneyInput';
 import type { Product, Purchase, Supplier } from '../../types/models';
 import BarcodeScanner from '../qr/BarcodeScanner';
 import { findProductByScannedCode } from '../qr/productLookup';
@@ -338,9 +339,9 @@ export default function PurchaseEditor({
                       onQuickAddRequest={openQuickAdd}
                     />
                   </div>
-                  <label><span className="purchase-mobile-label">Số lượng</span><input ref={(node) => { if (node) quantityInputRefs.current.set(line.key, node); else quantityInputRefs.current.delete(line.key); }} type="number" inputMode="decimal" min="0.001" step="0.001" value={line.quantity} onChange={(event) => patchLine(line.key, { quantity: Number(event.target.value) })} /></label>
-                  <label><span className="purchase-mobile-label">Giá nhập</span><input type="number" inputMode="numeric" min="0" step="1" value={line.unitCost} onChange={(event) => patchLine(line.key, { unitCost: Number(event.target.value) })} /></label>
-                  <label><span className="purchase-mobile-label">Giá bán</span><input aria-label="Giá bán" type="number" inputMode="numeric" min="0" step="1" value={line.salePrice ?? ''} onChange={(event) => patchLine(line.key, { salePrice: Number(event.target.value) })} /></label>
+                  <label><span className="purchase-mobile-label">Số lượng</span><input ref={(node) => { if (node) quantityInputRefs.current.set(line.key, node); else quantityInputRefs.current.delete(line.key); }} type="number" inputMode="numeric" min="1" step="1" value={line.quantity} onChange={(event) => patchLine(line.key, { quantity: Number(event.target.value) })} /></label>
+                  <VndMoneyInput label="Giá nhập" labelClassName="purchase-mobile-label" value={line.unitCost} onChange={(value) => patchLine(line.key, { unitCost: Number(value) })} />
+                  <VndMoneyInput label="Giá bán" labelClassName="purchase-mobile-label" value={line.salePrice ?? ''} onChange={(value) => patchLine(line.key, { salePrice: Number(value) })} />
                   <strong className="purchase-editor-line-total">{money(line.quantity * line.unitCost)} đ</strong>
                   <button className="purchase-editor-remove" type="button" onClick={() => removeLine(line.key)} disabled={busy || lines.length === 1} aria-label={`Xóa dòng ${index + 1}`}>×</button>
                 </div>

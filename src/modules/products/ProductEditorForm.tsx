@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import VndMoneyInput from '../../shared/numeric/VndMoneyInput';
 import type { Product } from '../../types/models';
 import type { ProductInput } from './productService';
 import {
@@ -90,8 +91,8 @@ export default function ProductEditorForm({
       <label>Barcode<input value={form.barcode} onChange={(event) => patchForm({ barcode: event.target.value })} /></label>
       <label>Mã QR<input value={form.qrCode} onChange={(event) => patchForm({ qrCode: event.target.value })} /></label>
       <label>Đơn vị tính<input placeholder="Cái, hộp, bộ..." value={form.unit} onChange={(event) => patchForm({ unit: event.target.value })} /></label>
-      <label>Giá vốn hiện tại (VND)<input type="number" min="0" step="1" value={form.costPrice} onChange={(event) => patchForm({ costPrice: event.target.value })} /></label>
-      <label>Giá bán (VND)<input type="number" min="0" step="1" value={form.salePrice} onChange={(event) => patchForm({ salePrice: event.target.value })} /></label>
+      <VndMoneyInput label="Giá vốn hiện tại (VND)" value={form.costPrice} onChange={(value) => patchForm({ costPrice: value })} />
+      <VndMoneyInput label="Giá bán (VND)" value={form.salePrice} onChange={(value) => patchForm({ salePrice: value })} />
       <label>Tồn tối thiểu<input type="number" min="0" step="1" placeholder="Không cảnh báo" value={form.minStock} onChange={(event) => patchForm({ minStock: event.target.value })} /></label>
       <label className="checkbox-field"><input type="checkbox" checked={form.active} onChange={(event) => patchForm({ active: event.target.checked })} />Đang kinh doanh</label>
 

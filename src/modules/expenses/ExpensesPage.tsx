@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { useAuth } from '../../auth/AuthContext';
+import VndMoneyInput from '../../shared/numeric/VndMoneyInput';
 import type { Expense } from '../../types/models';
 import { cancelExpense, createExpense, subscribeExpenses, updateExpense, type ExpenseInput } from './expenseService';
 import '../customers/crm.css';
@@ -242,7 +243,7 @@ export default function ExpensesPage() {
           <form className="crm-form" onSubmit={handleSubmit}>
             <label>Danh mục *<input required list="expense-category-suggestions" value={form.category} onChange={(event) => setForm({ ...form, category: event.target.value })} placeholder="Nhập danh mục chi phí" /></label>
             <datalist id="expense-category-suggestions"><option value="Điện" /><option value="Nước" /><option value="Internet" /><option value="Thuê mặt bằng" /><option value="Vận chuyển" /><option value="Lương" /><option value="Văn phòng phẩm" /><option value="Bảo trì" /><option value="Marketing" /><option value="Phí ngân hàng" /><option value="Chi phí khác" /></datalist>
-            <label>Số tiền (VND) *<input required type="number" min="1" step="1" inputMode="numeric" value={form.amount} onChange={(event) => setForm({ ...form, amount: event.target.value })} /></label>
+            <VndMoneyInput label="Số tiền (VND) *" value={form.amount} min={1} required onChange={(value) => setForm({ ...form, amount: value })} />
             <label>Ngày chi phí *<input required type="date" value={form.expenseDate} onChange={(event) => setForm({ ...form, expenseDate: event.target.value })} /></label>
             <label className="crm-field-full">Ghi chú<textarea rows={3} value={form.note} onChange={(event) => setForm({ ...form, note: event.target.value })} /></label>
             {formError && <p className="form-error crm-field-full" role="alert">{formError}</p>}
