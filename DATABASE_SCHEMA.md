@@ -8,6 +8,7 @@ Schema này là hợp đồng dữ liệu chung của toàn dự án. Mọi AI/m
 /users
 /products
 /productDeletionLocks
+/businessDataResetLock
 /categories
 /customers
 /suppliers
@@ -95,6 +96,29 @@ Quy tắc contract:
 - Final permanent delete phải là một atomic multi-location update gồm: `products/{productId}=null`, `PRODUCT_DELETED` audit log, và `productDeletionLocks/{productId}=null` cho toàn bộ batch.
 - Abort/failure trước final commit phải release lock; browser flow đăng ký `onDisconnect` cleanup trước khi acquire để tránh lock kẹt khi mất kết nối.
 - Firebase child key là physical Product identity cho permanent delete; stored `Product.id` mismatch phải fail closed, không được dùng stored id để redirect đường dẫn xóa.
+
+### 3.2. businessDataResetLock — khóa tạm thời cho hard reset dữ liệu kinh doanh
+
+Đường dẫn singleton: `/businessDataResetLock`.
+
+```ts
+interface BusinessDataResetLock {
+  actorUid: string;
+  createdAt: number;
+}
+```
+
+Đây là **operational concurrency lock tạm thời**, không phải business database thứ hai và không chứa bản sao Product/giao dịch.
+
+Quy tắc contract:
+- Chỉ `owner` đang active được tạo lock; `actorUid` phải bằng UID đang đăng nhập.
+- Lock là create-only và không được tạo khi còn bất kỳ `/productDeletionLocks` nào; ngược lại không được tạo Product deletion lock mới khi business reset lock đang tồn tại.
+- Trong lúc lock tồn tại, Security Rules phải từ chối mọi non-reset write vào `/products`, `/sales`, `/purchases`, `/stockOuts`, `/stockMovements`, `/stockOperations`, `/stocktakes` và `/productDeletionLocks`.
+- Sau khi acquire lock, client phải tạo snapshot backup bằng backup system hiện có. Nếu tạo/ghi file backup thất bại, destructive reset không được bắt đầu.
+- Destructive phase phải dùng **một root atomic multi-location update** xóa toàn bộ `/products`, `/sales`, `/purchases`, `/stockOuts`, `/stockMovements`, `/stockOperations`, `/stocktakes`, `/productDeletionLocks`; đồng thời tạo audit `BUSINESS_DATA_RESET` và xóa `/businessDataResetLock`.
+- Hard reset bắt buộc giữ nguyên `/users`, `/categories`, `/customers`, `/suppliers`, `/expenses`, `/settings` và toàn bộ audit history cũ trong `/auditLogs`.
+- Browser flow phải đăng ký `onDisconnect` cleanup trước khi acquire lock; failure trước final commit phải cố giải phóng lock rõ ràng, còn `onDisconnect` là fail-safe khi tab/network chết.
+- Backup JSON là snapshot tải xuống phía trình duyệt. Contract restore write hiện tại vẫn độc lập và đang bị khóa an toàn; hard reset không được mô tả là có restore tự động nếu chưa có contract restore được duyệt và kiểm thử.
 
 ## 4. categories
 
