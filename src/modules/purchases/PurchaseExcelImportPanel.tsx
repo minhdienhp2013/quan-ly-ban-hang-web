@@ -6,9 +6,9 @@ import {
   type PurchaseExcelImportResult,
   type PurchaseExcelImportRow,
 } from './purchaseExcelImport';
+import { buildPurchaseDraftFromExcel } from './purchaseExcelImportDraft';
 import { downloadPurchaseExcelTemplate } from './purchaseExcelImportTemplate';
 import {
-  buildPurchaseDraftFromExcel,
   createConfirmedPurchaseExcelProducts,
   createEmptyPurchaseExcelProgress,
   type PurchaseExcelCreateFailure,
@@ -271,7 +271,7 @@ export default function PurchaseExcelImportPanel({
                     <td>{row.rowNumber}</td>
                     <td><span className={`purchase-import-status purchase-import-status--${row.status.toLowerCase()}`}>{statusLabel(row.status)}</span></td>
                     <td>{row.name || '—'}</td>
-                    <td className="purchase-import-identifier">{row.matchedProductId ? row.effectiveSku : row.effectiveSku || row.sourceSku || '—'}</td>
+                    <td className="purchase-import-identifier">{row.effectiveSku || row.sourceSku || '—'}</td>
                     <td className="purchase-import-identifier">
                       {row.sourceBarcode || '—'}{row.sourceQrCode ? <><br /><small>QR: {row.sourceQrCode}</small></> : null}
                     </td>
