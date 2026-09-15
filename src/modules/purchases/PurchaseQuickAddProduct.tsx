@@ -3,6 +3,7 @@ import type { Product } from '../../types/models';
 import ProductEditorForm from '../products/ProductEditorForm';
 import { createProduct, type ProductInput } from '../products/productService';
 import '../products/products.css';
+import { resolvePurchaseModalFocusTarget } from './purchaseModalFocus';
 
 interface PurchaseQuickAddProductProps {
   products: readonly Product[];
@@ -68,21 +69,25 @@ export default function PurchaseQuickAddProduct({
       if (event.key !== 'Tab') return;
       const focusable = [...dialog.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)]
         .filter((element) => !element.hasAttribute('disabled') && element.getAttribute('aria-hidden') !== 'true');
-      if (focusable.length === 0) {
-        event.preventDefault();
+      const activeElement = document.activeElement;
+      const activeIndex = activeElement ? focusable.indexOf(activeElement as HTMLElement) : -1;
+      const focusTarget = resolvePurchaseModalFocusTarget({
+        focusableCount: focusable.length,
+        activeIndex,
+        activeInsideDialog: Boolean(activeElement && dialog.contains(activeElement)),
+        shiftKey: event.shiftKey,
+      });
+
+      if (!focusTarget) return;
+      event.preventDefault();
+
+      if (focusTarget === 'dialog') {
         dialog.focus();
         return;
       }
 
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-      if (event.shiftKey && document.activeElement === first) {
-        event.preventDefault();
-        last.focus();
-      } else if (!event.shiftKey && document.activeElement === last) {
-        event.preventDefault();
-        first.focus();
-      }
+      const target = focusTarget === 'first' ? focusable[0] : focusable[focusable.length - 1];
+      target?.focus();
     }
 
     document.addEventListener('keydown', handleKeyDown);
