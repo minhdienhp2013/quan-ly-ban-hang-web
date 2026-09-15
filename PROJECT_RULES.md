@@ -77,3 +77,84 @@ AI phải trả lời được 4 câu hỏi trước khi sửa code:
 - Thay đổi này có ảnh hưởng module khác không?
 
 Nếu có ảnh hưởng kiến trúc hoặc schema, phải dừng việc tự ý thay đổi và chuyển đề xuất cho AI trung tâm.
+
+## 10. Kỷ luật engineering toàn repo: reuse-first, minimum-code
+
+Mọi AI/người phát triển phải đi theo thứ tự sau **trước khi viết code mới**:
+
+1. Tính năng/code này có thực sự cần tồn tại không? Nếu chỉ là nhu cầu suy đoán, áp dụng YAGNI.
+2. Search vùng code liên quan để tìm helper/service/component/type/pattern đã tồn tại.
+3. Đọc và trace luồng dữ liệu end-to-end trước khi sửa.
+4. Reuse implementation hiện có nếu đáp ứng contract.
+5. Nếu reuse chưa đủ, ưu tiên extend điểm chung nhỏ nhất.
+6. Ưu tiên JavaScript/TypeScript/React/browser native API và CSS/HTML native khi chúng đáp ứng đủ yêu cầu.
+7. Ưu tiên dependency đã cài sẵn trước khi thêm dependency mới.
+8. Chỉ sau các bước trên mới được tạo implementation mới, với diff/file/state/side-effect ít nhất hợp lý.
+
+Phương châm:
+
+`SEARCH → READ → TRACE → REUSE → EXTEND → CREATE`
+
+Không được làm ngược thành `CREATE trước rồi mới đi tìm`.
+
+Các nguyên tắc tối giản **không bao giờ được dùng để hy sinh**: correctness, data integrity, inventory consistency, security, permissions, accessibility, error handling, transaction safety, idempotency hoặc auditability.
+
+Ưu tiên:
+
+- existing pattern > new abstraction;
+- boring code > clever code;
+- small diff > rewrite, sau khi đã hiểu luồng;
+- một contract + một implementation cho mỗi trách nhiệm;
+- không tạo hệ thống song song.
+
+Không tạo abstraction chỉ vì “sau này có thể dùng”. Chỉ tạo shared abstraction khi đã có nhu cầu thực, duplicate logic thực sự tồn tại hoặc contract chung cần một owner rõ ràng.
+
+## 11. Root cause first
+
+Khi xử lý bug:
+
+1. Xác định symptom.
+2. Trace data/control flow.
+3. Tìm root cause.
+4. Kiểm tra caller/use case liên quan.
+5. Sửa tại điểm chung nhỏ nhất phù hợp ownership.
+6. Thêm regression test cho lỗi thực tế.
+
+Không vá riêng một màn hình nếu nguyên nhân nằm trong shared helper/service/component và các caller khác cũng có nguy cơ gặp cùng lỗi.
+
+## 12. Shared code và chống hệ thống song song
+
+- Inventory/Sales/Purchase/StockOut/Stocktake phải dùng stock/CAS contract hiện có; không tạo stock updater riêng.
+- Products quản lý metadata theo contract; không tự tạo đường sửa tồn kho.
+- QR/Barcode/Printing phải reuse Product/search/handoff contract hiện có; không tạo product database/search engine thứ hai.
+- CRM không duplicate Customer/Supplier model trong module khác.
+- Reports phải đọc transaction/source chuẩn; không tạo nguồn doanh thu/lợi nhuận thứ hai.
+- Nếu nhiều module cần cùng một chức năng, AI trung tâm phải xác định owner cho shared implementation trước khi code.
+
+## 13. Dependency và native-platform policy
+
+Không thêm dependency chỉ để thay một khả năng native hoặc helper đang có.
+
+Trước khi thêm dependency phải ghi rõ trong PR:
+
+- native/stdlib/current dependency nào đã được đánh giá;
+- vì sao chúng không đủ;
+- ảnh hưởng bundle/security/maintenance;
+- lý do dependency mới là lựa chọn nhỏ và an toàn hơn.
+
+Không cài package/agent plugin phát triển vào runtime app chỉ để áp dụng quy tắc coding. Các quy tắc cho coding agent được quản lý bằng tài liệu repo (`AGENTS.md`, `PROJECT_RULES.md`, `MODULE_COORDINATION.md`).
+
+## 14. Pre-code stop conditions
+
+AI/module owner phải **DỪNG và báo AI trung tâm** nếu implementation yêu cầu một trong các việc sau mà task chưa cấp quyền rõ ràng:
+
+- đổi database schema/node/path;
+- đổi `src/types/models.ts` shared contract;
+- đổi Firebase Security Rules hoặc permission;
+- đổi stock CAS/stockVersion/idempotency contract;
+- thêm write path nghiệp vụ mới;
+- đổi module ownership;
+- sửa shared service mà nhiều module phụ thuộc;
+- thêm dependency mới có ảnh hưởng kiến trúc.
+
+Chi tiết quy trình giao việc, báo cáo pre-code và PR review nằm trong `MODULE_COORDINATION.md` và `AGENTS.md`.
