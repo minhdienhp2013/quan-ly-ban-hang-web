@@ -198,7 +198,8 @@ test('focus stays deliberate for blocked/cancel/error and success moves to stabl
   const page = read('src/modules/products/ProductsPage.tsx');
   const bar = read('src/modules/products/GoodsBulkActionBar.tsx');
   assert.match(bar, /aria-disabled=\{busy\}/);
-  assert.doesNotMatch(bar.slice(bar.indexOf('permanentDeleteButtonRef')), /disabled=\{busy\}/);
+  const permanentButton = bar.slice(bar.indexOf('ref={permanentDeleteButtonRef}'));
+  assert.doesNotMatch(permanentButton, /disabled=\{busy\}/);
   assert.match(page, /permanentDeleteButtonRef\.current\?\.focus\(\)/);
   assert.match(page, /setFocusStatusAfterDelete\(true\)/);
   assert.match(page, /statusRef\.current\?\.focus\(\)/);
@@ -240,7 +241,7 @@ test('Firebase rules gate delete with own lock and block references/Product writ
   assert.match(productWrite, /data\.child\('id'\)/);
   assert.match(lockWrite, /!data\.exists\(\)/);
   assert.match(lockWrite, /root\.child\('products'\)/);
-  assert.match(lockWrite, /data\.child\('id'\)/);
+  assert.match(lockWrite, /root\.child\('products'\).*child\('id'\)/);
 
   for (const node of ['sales', 'purchases', 'stockOuts', 'stocktakes']) {
     const validation = rules[node][`$${node === 'sales' ? 'saleId' : node === 'purchases' ? 'purchaseId' : node === 'stockOuts' ? 'stockOutId' : 'stocktakeId'}`].items.$itemId['.validate'];
