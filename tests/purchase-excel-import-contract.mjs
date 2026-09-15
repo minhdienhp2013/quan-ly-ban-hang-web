@@ -15,10 +15,19 @@ import {
 
 const parserHarnessPath = 'src/modules/purchases/.purchaseExcelImport.node-test.ts';
 const draftHarnessPath = 'src/modules/purchases/.purchaseExcelImportDraft.node-test.ts';
+const newProductHarnessPath = 'src/modules/purchases/.purchaseExcelImportNewProduct.node-test.ts';
+const workflowHarnessPath = 'src/modules/purchases/.purchaseExcelImportWorkflow.node-test.ts';
+
+const newProductSource = fs.readFileSync('src/modules/purchases/purchaseExcelImportNewProduct.ts', 'utf8')
+  .replace("../../shared/search/searchNormalization'", "../../shared/search/searchNormalization.ts'")
+  .replace("../products/productService'", "../products/productService.ts'")
+  .replace("./purchaseExcelImport'", "./purchaseExcelImport.ts'");
+fs.writeFileSync(newProductHarnessPath, newProductSource);
 
 const parserSource = fs.readFileSync('src/modules/purchases/purchaseExcelImport.ts', 'utf8')
   .replace("../../shared/search/searchNormalization'", "../../shared/search/searchNormalization.ts'")
-  .replace("../products/productLegacyCode'", "../products/productLegacyCode.ts'");
+  .replace("../products/productLegacyCode'", "../products/productLegacyCode.ts'")
+  .replace("./purchaseExcelImportNewProduct'", "./.purchaseExcelImportNewProduct.node-test.ts'");
 fs.writeFileSync(parserHarnessPath, parserSource);
 
 const draftSource = fs.readFileSync('src/modules/purchases/purchaseExcelImportDraft.ts', 'utf8')
@@ -26,14 +35,25 @@ const draftSource = fs.readFileSync('src/modules/purchases/purchaseExcelImportDr
   .replace("./purchaseDraft'", "./purchaseDraft.ts'");
 fs.writeFileSync(draftHarnessPath, draftSource);
 
+const workflowSource = fs.readFileSync('src/modules/purchases/purchaseExcelImportWorkflow.ts', 'utf8')
+  .replace("../../shared/search/searchNormalization'", "../../shared/search/searchNormalization.ts'")
+  .replace(
+    "import { createProduct, type ProductInput } from '../products/productService';",
+    "import type { ProductInput } from '../products/productService.ts';\nconst createProduct = async () => { throw new Error('default createProduct must not run in test'); };",
+  )
+  .replace("./purchaseExcelImport'", "./purchaseExcelImport.ts'")
+  .replace("./purchaseExcelImportNewProduct'", "./.purchaseExcelImportNewProduct.node-test.ts'");
+fs.writeFileSync(workflowHarnessPath, workflowSource);
+
 process.on('exit', () => {
-  for (const path of [parserHarnessPath, draftHarnessPath]) {
+  for (const path of [parserHarnessPath, draftHarnessPath, newProductHarnessPath, workflowHarnessPath]) {
     try { fs.unlinkSync(path); } catch { /* already removed */ }
   }
 });
 
 const { parsePurchaseExcelBuffer } = await import(`../${parserHarnessPath}?v=${Date.now()}`);
 const { buildPurchaseDraftFromExcel } = await import(`../${draftHarnessPath}?v=${Date.now()}`);
+const { createConfirmedPurchaseExcelProducts } = await import(`../${workflowHarnessPath}?v=${Date.now()}`);
 
 const HEADERS = [
   'Tên hàng',
@@ -76,6 +96,35 @@ function workbookBuffer(rows, headers = HEADERS) {
 
 function parse(rows, products = [], headers = HEADERS) {
   return parsePurchaseExcelBuffer(workbookBuffer(rows, headers), products);
+}
+
+function newImportRow(overrides = {}) {
+  return {
+    rowNumber: 2,
+    status: 'NEW',
+    message: 'Hàng mới',
+    name: 'Hàng ABC',
+    sourceSku: 'ABC',
+    sourceBarcode: '',
+    sourceQrCode: '',
+    unit: 'Cái',
+    quantity: 1,
+    unitCost: 10,
+    salePrice: 20,
+    minStock: 1,
+    effectiveSku: 'ABC',
+    newProductInput: {
+      sku: 'ABC',
+      name: 'Hàng ABC',
+      barcode: 'ABC',
+      unit: 'Cái',
+      costPrice: 10,
+      salePrice: 20,
+      minStock: 1,
+      active: true,
+    },
+    ...overrides,
+  };
 }
 
 class MemoryStorage {
@@ -180,6 +229,35 @@ test('SKU and barcode pointing to different Products is REVIEW conflict', () => 
   assert.match(row.message, /trỏ tới các Product khác nhau/);
 });
 
+test('B1: explicit new SKU cannot fall back through an existing exact name', () => {
+  const existing = product({ id: 'old-chair', sku: 'OLD-001', name: 'Ghế gỗ', barcode: undefined, qrCode: undefined });
+  const row = parse([['Ghế gỗ', 'NEW-999', '', 'Cái', 1, 100, 150, '', '']], [existing]).rows[0];
+  assert.equal(row.status, 'REVIEW');
+  assert.notEqual(row.matchedProductId, existing.id);
+  assert.match(row.message, /mã mới.*tên trùng/i);
+});
+
+test('B1: matching SKU plus mismatched explicit barcode is REVIEW', () => {
+  const existing = product({ id: 'a', sku: 'A', name: 'Ghế A', barcode: 'BAR-A', qrCode: undefined });
+  const row = parse([['Ghế A', 'A', 'UNKNOWN', 'Cái', 1, 100, 150, '', '']], [existing]).rows[0];
+  assert.equal(row.status, 'REVIEW');
+  assert.match(row.message, /Barcode.*không khớp/i);
+});
+
+test('B1: matching SKU and barcode consistently resolves the same Product', () => {
+  const existing = product({ id: 'a', sku: 'A', name: 'Ghế A', barcode: 'BAR-A', qrCode: undefined });
+  const row = parse([['Tên Excel', 'A', 'BAR-A', 'Cái', 1, 100, 150, '', '']], [existing]).rows[0];
+  assert.equal(row.status, 'MATCHED');
+  assert.equal(row.matchedProductId, 'a');
+});
+
+test('B2: fallback barcode collision with an existing Product is REVIEW', () => {
+  const existing = product({ id: 'old', sku: 'OLD-1', name: 'Khác tên', barcode: 'NEW-A', qrCode: undefined });
+  const row = parse([['Hàng mới khác', 'NEW-A', '', 'Cái', 1, 10, 20, '', '']], [existing]).rows[0];
+  assert.equal(row.status, 'REVIEW');
+  assert.match(row.message, /Barcode.*NEW-A.*đã thuộc Product/i);
+});
+
 test('two different NEW names with same generated code are REVIEW', () => {
   const result = parse([
     ['Bàn cao', '', '', 'Cái', 1, 10, 20, '', ''],
@@ -188,6 +266,52 @@ test('two different NEW names with same generated code are REVIEW', () => {
   assert.deepEqual(result.rows.map((row) => row.status), ['REVIEW', 'REVIEW']);
   assert.equal(result.summary.review, 2);
   assert.match(result.rows[0].message, /khác tên cùng Mã hàng/);
+});
+
+test('B3: NEW group preserves one manufacturer barcode regardless of row order', () => {
+  const rowsA = [
+    ['Hàng ABC', 'ABC', '', 'Cái', 1, 10, 20, 1, ''],
+    ['Hàng ABC', 'ABC', '8931234567890', 'Cái', 2, 10, 20, 1, ''],
+  ];
+  const rowsB = [...rowsA].reverse();
+  const a = parse(rowsA).rows;
+  const b = parse(rowsB).rows;
+  assert.deepEqual(a.map((row) => row.status), ['NEW', 'NEW']);
+  assert.deepEqual(b.map((row) => row.status), ['NEW', 'NEW']);
+  assert.equal(a[0].newProductInput.barcode, '8931234567890');
+  assert.equal(a[1].newProductInput.barcode, '8931234567890');
+  assert.deepEqual(a[0].newProductInput, b[0].newProductInput);
+});
+
+test('B3: conflicting NEW metadata fields fail closed as REVIEW', () => {
+  const barcode = parse([
+    ['Hàng ABC', 'ABC', '111', 'Cái', 1, 10, 20, 1, ''],
+    ['Hàng ABC', 'ABC', '222', 'Cái', 1, 10, 20, 1, ''],
+  ]).rows;
+  assert.deepEqual(barcode.map((row) => row.status), ['REVIEW', 'REVIEW']);
+
+  const qr = parse([
+    ['Hàng ABC', 'ABC', '', 'Cái', 1, 10, 20, 1, 'Q1'],
+    ['Hàng ABC', 'ABC', '', 'Cái', 1, 10, 20, 1, 'Q2'],
+  ]).rows;
+  assert.deepEqual(qr.map((row) => row.status), ['REVIEW', 'REVIEW']);
+
+  for (const variant of [
+    [
+      ['Hàng ABC', 'ABC', '', 'Cái', 1, 10, 20, 1, ''],
+      ['Hàng ABC', 'ABC', '', 'Bộ', 1, 10, 20, 1, ''],
+    ],
+    [
+      ['Hàng ABC', 'ABC', '', 'Cái', 1, 10, 20, 1, ''],
+      ['Hàng ABC', 'ABC', '', 'Cái', 1, 10, 30, 1, ''],
+    ],
+    [
+      ['Hàng ABC', 'ABC', '', 'Cái', 1, 10, 20, 1, ''],
+      ['Hàng ABC', 'ABC', '', 'Cái', 1, 10, 20, 2, ''],
+    ],
+  ]) {
+    assert.deepEqual(parse(variant).rows.map((row) => row.status), ['REVIEW', 'REVIEW']);
+  }
 });
 
 test('quantity <= 0, negative/invalid price and numeric identifier cells fail closed', () => {
@@ -229,15 +353,50 @@ test('same Product with different import costs is REVIEW instead of silent avera
   assert.match(result.rows[0].message, /không tự average/);
 });
 
+test('B4: latest catalog collisions reject before createProduct is called', async () => {
+  const cases = [
+    {
+      row: newImportRow(),
+      current: [product({ id: 'sku-now', sku: 'ABC', name: 'Khác', barcode: 'OTHER', qrCode: undefined })],
+    },
+    {
+      row: newImportRow(),
+      current: [product({ id: 'bar-now', sku: 'OTHER', name: 'Khác', barcode: 'ABC', qrCode: undefined })],
+    },
+    {
+      row: newImportRow({ sourceQrCode: 'QR-NEW', newProductInput: { ...newImportRow().newProductInput, qrCode: 'QR-NEW' } }),
+      current: [product({ id: 'qr-now', sku: 'OTHER', name: 'Khác', barcode: 'OTHER', qrCode: 'QR-NEW' })],
+    },
+  ];
+
+  for (const entry of cases) {
+    let createCalls = 0;
+    const result = await createConfirmedPurchaseExcelProducts({
+      rows: [entry.row],
+      selectedNewRowNumbers: new Set([entry.row.rowNumber]),
+      actorUid: 'uid-test',
+      currentProducts: entry.current,
+      createProductFn: async () => {
+        createCalls += 1;
+        return product({ id: 'should-not-create', sku: entry.row.effectiveSku });
+      },
+    });
+    assert.equal(createCalls, 0);
+    assert.equal(result.failures.length, 1);
+    assert.match(result.failures[0].message, /Danh mục đã thay đổi.*phân tích lại file/i);
+  }
+});
+
 test('purchase Excel workflow creates Products only and cannot mutate stock or auto-complete Purchase', () => {
   const workflow = fs.readFileSync('src/modules/purchases/purchaseExcelImportWorkflow.ts', 'utf8');
   const panel = fs.readFileSync('src/modules/purchases/PurchaseExcelImportPanel.tsx', 'utf8');
   const page = fs.readFileSync('src/modules/purchases/PurchasesPage.tsx', 'utf8');
   const productService = fs.readFileSync('src/modules/products/productService.ts', 'utf8');
 
-  assert.match(workflow, /import \{ createProduct \} from '\.\.\/products\/productService'/);
+  assert.match(workflow, /createProduct/);
   assert.doesNotMatch(workflow, /commitStockOperation|stockQuantity|stockVersion|StockMovement|createPurchase|increment\(/);
   assert.doesNotMatch(panel, /createPurchase|commitStockOperation|increment\(/);
+  assert.match(panel, /currentProducts: products/);
   assert.match(panel, /result\.failures\.length > 0/);
   assert.match(panel, /setProductsConfirmed\(false\)/);
   assert.match(panel, /Đưa vào phiếu nhập/);
@@ -262,8 +421,14 @@ test('draft safety guards Nhập Excel before replacing current editor and previ
 
 test('responsive import UI uses internal scroll, 44px touch targets and mobile-safe grids', () => {
   const css = fs.readFileSync('src/modules/purchases/purchaseExcelImport.css', 'utf8');
+  const panel = fs.readFileSync('src/modules/purchases/PurchaseExcelImportPanel.tsx', 'utf8');
   assert.match(css, /purchase-import-table-wrap\{[^}]*overflow:auto/);
   assert.match(css, /purchase-import-file\{[^}]*min-height:44px/);
+  assert.match(css, /purchase-import-checkbox-hit\{[^}]*min-width:44px[^}]*min-height:44px/);
+  assert.match(css, /purchase-import-checkbox-hit:focus-within/);
+  assert.match(panel, /<label className="purchase-import-checkbox-hit">\s*<input\s+type="checkbox"/s);
+  assert.match(panel, /aria-label=\{`Chọn hàng mới dòng \$\{row\.rowNumber\}`\}/);
+  assert.match(panel, /disabled=\{productsConfirmed \|\| creatingProducts\}/);
   assert.match(css, /@media\(max-width:700px\)/);
   assert.match(css, /@media\(max-width:430px\)/);
   assert.match(css, /purchase-toolbar-actions\{grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
