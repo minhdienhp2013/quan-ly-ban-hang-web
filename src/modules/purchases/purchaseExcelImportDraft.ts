@@ -15,6 +15,8 @@ export function buildPurchaseDraftFromExcel(input: {
   rows: readonly PurchaseExcelImportRow[];
   selectedNewRowNumbers: ReadonlySet<number>;
   progress: PurchaseExcelCreateProgress;
+  supplierId?: string;
+  supplierName?: string;
 }): PurchaseDraft {
   if (input.rows.some((row) => row.status === 'REVIEW' || row.status === 'ERROR')) {
     throw new Error('Còn dòng Cần kiểm tra/Lỗi. Hãy sửa file trước khi đưa vào phiếu nhập.');
@@ -47,8 +49,8 @@ export function buildPurchaseDraftFromExcel(input: {
 
   return {
     version: PURCHASE_DRAFT_VERSION,
-    supplierId: '',
-    supplierName: '',
+    supplierId: input.supplierId ?? '',
+    supplierName: input.supplierName ?? '',
     note: '',
     lines,
   };
