@@ -7,6 +7,7 @@ import {
   type KeyboardEvent,
 } from 'react';
 import { useAuth } from '../../auth/AuthContext';
+import VndMoneyInput from '../../shared/numeric/VndMoneyInput';
 import { searchProducts } from '../../shared/search/productSearch';
 import type { Customer, PaymentMethod, Product, Sale } from '../../types/models';
 import { subscribeProducts } from '../products/productService';
@@ -22,6 +23,7 @@ import {
 } from './salesPosUi';
 import { createSale, createSaleId, subscribeCustomers, subscribeSales } from './salesService';
 import './sales.css';
+import './salesPosOverrides.css';
 
 type CartState = Record<string, number>;
 type PosPaymentMethod = Extract<PaymentMethod, 'cash' | 'bank_transfer'>;
@@ -602,9 +604,9 @@ export default function SalesPage() {
                       <button type="button" aria-label={`Giảm số lượng ${product.name}`} onClick={() => setLineQuantity(product, line.quantity - 1)}>−</button>
                       <input
                         type="number"
-                        inputMode="decimal"
-                        min="0.001"
-                        step="0.001"
+                        inputMode="numeric"
+                        min="1"
+                        step="1"
                         max={Number(product.stockQuantity) || undefined}
                         value={line.quantity}
                         aria-label={`Số lượng ${product.name}`}
@@ -670,18 +672,16 @@ export default function SalesPage() {
             <span>Tổng tiền hàng</span>
             <strong>{formatMoney(subtotal)}</strong>
           </div>
-          <label className="sales-discount-field">
-            <span>Giảm giá</span>
-            <input
-              type="number"
-              inputMode="numeric"
-              min="0"
-              step="1000"
+          <div className="sales-discount-field">
+            <VndMoneyInput
+              label="Giảm giá đơn (VND)"
+              ariaLabel="Giảm giá bằng số tiền VND"
               value={discount}
-              onChange={(event) => setDiscount(Math.max(0, Math.round(event.currentTarget.valueAsNumber || 0)))}
-              aria-label="Giảm giá bằng số tiền VND"
+              onChange={(value) => setDiscount(Math.max(0, Math.round(Number(value) || 0)))}
+              className="sales-discount-input"
+              labelClassName="sales-discount-label"
             />
-          </label>
+          </div>
           <div className="sales-summary__payable">
             <span>Khách cần trả</span>
             <strong>{formatMoney(payable)}</strong>
