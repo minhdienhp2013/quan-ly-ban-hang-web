@@ -9,7 +9,7 @@
 }
 
 .sales-discount-field .vnd-money-input__field {
-  min-height: 39px;
+  min-height: 44px;
   border: 1px solid #cbd9ea;
   border-radius: 9px;
   background: #fff;
@@ -20,6 +20,19 @@
 
 .sales-discount-field .vnd-money-input__steps {
   display: none;
+}
+
+.sales-error button,
+.sales-recent-header > button,
+.sales-remove-line {
+  min-width: 44px;
+  min-height: 44px;
+}
+
+.sales-remove-line {
+  width: 44px;
+  height: 44px;
+  box-sizing: border-box;
 }
 
 @media (max-width: 560px) {
