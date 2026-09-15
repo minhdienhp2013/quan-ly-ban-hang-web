@@ -7,6 +7,7 @@ Schema này là hợp đồng dữ liệu chung của toàn dự án. Mọi AI/m
 ```text
 /users
 /products
+/productDeletionLocks
 /categories
 /customers
 /suppliers
@@ -69,6 +70,31 @@ Quy tắc:
 - `stockVersion` là số CAS tăng đơn điệu dùng để phát hiện ghi tồn cạnh tranh. Sản phẩm cũ chưa có field này được hiểu là version `0`; sản phẩm mới khởi tạo version `0`.
 - Mọi nghiệp vụ làm đổi `stockQuantity` phải ghi `stockVersion = version trước + 1` trong cùng atomic multi-location update.
 - Import Excel không được âm thầm ghi đè sản phẩm trùng.
+
+### 3.1. productDeletionLocks — khóa tạm thời cho permanent Product deletion
+
+Đường dẫn: `/productDeletionLocks/{productId}`.
+
+```ts
+interface ProductDeletionLock {
+  productId: string;
+  actorUid: string;
+  createdAt: number;
+}
+```
+
+Đây là **operational concurrency lock tạm thời**, không phải Product database thứ hai và không được lưu business Product data tại đây.
+
+Quy tắc contract:
+- Chỉ `owner` đang active được tạo/xóa lock.
+- Lock chỉ được tạo khi Product tại đúng Firebase child key tồn tại, `stockQuantity === 0`, `stockVersion` missing/`0`, và stored `Product.id` nếu có phải khớp child key.
+- Lock là create-only: không overwrite lock của operation khác.
+- Trong lúc lock tồn tại, mọi non-delete write vào Product tương ứng phải bị Security Rules từ chối, bao gồm metadata, active state và CAS stock write.
+- Reference mới hoặc đổi `productId` tại `sales.items`, `purchases.items`, `stockOuts.items`, `stockMovements`, `stocktakes.items` phải bị từ chối nếu Product đang deletion-locked.
+- Sau khi acquire toàn bộ lock, client phải re-read Product + canonical reference nodes trước khi destructive write.
+- Final permanent delete phải là một atomic multi-location update gồm: `products/{productId}=null`, `PRODUCT_DELETED` audit log, và `productDeletionLocks/{productId}=null` cho toàn bộ batch.
+- Abort/failure trước final commit phải release lock; browser flow đăng ký `onDisconnect` cleanup trước khi acquire để tránh lock kẹt khi mất kết nối.
+- Firebase child key là physical Product identity cho permanent delete; stored `Product.id` mismatch phải fail closed, không được dùng stored id để redirect đường dẫn xóa.
 
 ## 4. categories
 

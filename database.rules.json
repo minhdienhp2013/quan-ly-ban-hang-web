@@ -12,10 +12,17 @@
     },
     "products": {
       ".read": "auth != null && root.child('users').child(auth.uid).child('active').val() === true",
-      ".write": "auth != null && root.child('users').child(auth.uid).child('active').val() === true",
       ".indexOn": ["sku", "barcode", "qrCode", "updatedAt"],
       "$productId": {
+        ".write": "auth != null && root.child('users').child(auth.uid).child('active').val() === true && ((newData.exists() && !root.child('productDeletionLocks').child($productId).exists()) || (data.exists() && !newData.exists() && root.child('users').child(auth.uid).child('role').val() === 'owner' && root.child('productDeletionLocks').child($productId).child('actorUid').val() === auth.uid && data.child('stockQuantity').isNumber() && data.child('stockQuantity').val() === 0 && (!data.child('stockVersion').exists() || (data.child('stockVersion').isNumber() && data.child('stockVersion').val() === 0)) && (!data.child('id').exists() || data.child('id').val() === $productId)))",
         ".validate": "!data.exists() ? (newData.exists() && newData.child('stockQuantity').isNumber() && newData.child('stockQuantity').val() === 0 && (!newData.child('stockVersion').exists() || (newData.child('stockVersion').isNumber() && newData.child('stockVersion').val() === 0))) : (newData.exists() && newData.child('stockQuantity').isNumber() && newData.child('stockQuantity').val() >= 0 && ((newData.child('stockQuantity').val() === data.child('stockQuantity').val() && ((!data.child('stockVersion').exists() && (!newData.child('stockVersion').exists() || newData.child('stockVersion').val() === 0)) || (data.child('stockVersion').isNumber() && newData.child('stockVersion').isNumber() && newData.child('stockVersion').val() === data.child('stockVersion').val()))) || (newData.child('stockQuantity').val() !== data.child('stockQuantity').val() && newData.child('stockVersion').isNumber() && newData.child('stockVersion').val() === (data.child('stockVersion').isNumber() ? data.child('stockVersion').val() + 1 : 1))))"
+      }
+    },
+    "productDeletionLocks": {
+      ".read": "auth != null && root.child('users').child(auth.uid).child('active').val() === true && root.child('users').child(auth.uid).child('role').val() === 'owner'",
+      "$productId": {
+        ".write": "auth != null && root.child('users').child(auth.uid).child('active').val() === true && root.child('users').child(auth.uid).child('role').val() === 'owner' && ((!data.exists() && newData.exists() && newData.child('actorUid').val() === auth.uid && root.child('products').child($productId).exists() && root.child('products').child($productId).child('stockQuantity').isNumber() && root.child('products').child($productId).child('stockQuantity').val() === 0 && (!root.child('products').child($productId).child('stockVersion').exists() || (root.child('products').child($productId).child('stockVersion').isNumber() && root.child('products').child($productId).child('stockVersion').val() === 0)) && (!root.child('products').child($productId).child('id').exists() || root.child('products').child($productId).child('id').val() === $productId)) || !newData.exists())",
+        ".validate": "newData.hasChildren(['productId', 'actorUid', 'createdAt']) && newData.child('productId').val() === $productId && newData.child('actorUid').val() === auth.uid && newData.child('createdAt').isNumber()"
       }
     },
     "categories": {
@@ -35,22 +42,46 @@
     "sales": {
       ".read": "auth != null && root.child('users').child(auth.uid).child('active').val() === true",
       ".write": "auth != null && root.child('users').child(auth.uid).child('active').val() === true",
-      ".indexOn": ["createdAt", "status", "customerId"]
+      ".indexOn": ["createdAt", "status", "customerId"],
+      "$saleId": {
+        "items": {
+          "$itemId": {
+            ".validate": "!newData.exists() || (data.exists() && newData.child('productId').val() === data.child('productId').val()) || (newData.child('productId').isString() && root.child('products').child(newData.child('productId').val()).exists() && !root.child('productDeletionLocks').child(newData.child('productId').val()).exists())"
+          }
+        }
+      }
     },
     "purchases": {
       ".read": "auth != null && root.child('users').child(auth.uid).child('active').val() === true",
       ".write": "auth != null && root.child('users').child(auth.uid).child('active').val() === true",
-      ".indexOn": ["createdAt", "status", "supplierId"]
+      ".indexOn": ["createdAt", "status", "supplierId"],
+      "$purchaseId": {
+        "items": {
+          "$itemId": {
+            ".validate": "!newData.exists() || (data.exists() && newData.child('productId').val() === data.child('productId').val()) || (newData.child('productId').isString() && root.child('products').child(newData.child('productId').val()).exists() && !root.child('productDeletionLocks').child(newData.child('productId').val()).exists())"
+          }
+        }
+      }
     },
     "stockOuts": {
       ".read": "auth != null && root.child('users').child(auth.uid).child('active').val() === true",
       ".write": "auth != null && root.child('users').child(auth.uid).child('active').val() === true",
-      ".indexOn": ["createdAt", "status", "reason"]
+      ".indexOn": ["createdAt", "status", "reason"],
+      "$stockOutId": {
+        "items": {
+          "$itemId": {
+            ".validate": "!newData.exists() || (data.exists() && newData.child('productId').val() === data.child('productId').val()) || (newData.child('productId').isString() && root.child('products').child(newData.child('productId').val()).exists() && !root.child('productDeletionLocks').child(newData.child('productId').val()).exists())"
+          }
+        }
+      }
     },
     "stockMovements": {
       ".read": "auth != null && root.child('users').child(auth.uid).child('active').val() === true",
       ".write": "auth != null && root.child('users').child(auth.uid).child('active').val() === true",
-      ".indexOn": ["createdAt", "productId", "type", "referenceId"]
+      ".indexOn": ["createdAt", "productId", "type", "referenceId"],
+      "$movementId": {
+        ".validate": "!newData.exists() || (data.exists() && newData.child('productId').val() === data.child('productId').val()) || (newData.child('productId').isString() && root.child('products').child(newData.child('productId').val()).exists() && !root.child('productDeletionLocks').child(newData.child('productId').val()).exists())"
+      }
     },
     "stockOperations": {
       ".read": "auth != null && root.child('users').child(auth.uid).child('active').val() === true",
@@ -63,7 +94,14 @@
     "stocktakes": {
       ".read": "auth != null && root.child('users').child(auth.uid).child('active').val() === true",
       ".write": "auth != null && root.child('users').child(auth.uid).child('active').val() === true",
-      ".indexOn": ["createdAt", "status"]
+      ".indexOn": ["createdAt", "status"],
+      "$stocktakeId": {
+        "items": {
+          "$itemId": {
+            ".validate": "!newData.exists() || (data.exists() && newData.child('productId').val() === data.child('productId').val()) || (newData.child('productId').isString() && root.child('products').child(newData.child('productId').val()).exists() && !root.child('productDeletionLocks').child(newData.child('productId').val()).exists())"
+          }
+        }
+      }
     },
     "expenses": {
       ".read": "auth != null && root.child('users').child(auth.uid).child('active').val() === true && root.child('users').child(auth.uid).child('role').val() === 'owner'",
