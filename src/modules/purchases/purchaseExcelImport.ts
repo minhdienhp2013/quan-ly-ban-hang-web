@@ -153,7 +153,7 @@ function readSafeIdentifier(cell: CellObject | undefined, label: string) {
   if (cell.f) {
     return { value: '', error: `${label} dùng công thức Excel; không thể xác minh identifier an toàn.` };
   }
-  if (cell.t !== 's' && cell.t !== 'str') {
+  if (cell.t !== 's') {
     return { value: '', error: `${label} đang được Excel lưu dạng số/không phải TEXT; có thể đã mất số 0 đầu hoặc bị biến dạng.` };
   }
   const value = String(cell.v).trim();
@@ -199,6 +199,15 @@ function matchedRow(
   product: Product,
   via: string,
 ): PurchaseExcelImportRow {
+  if (!product.active) {
+    return {
+      ...base,
+      status: 'REVIEW',
+      message: `Product “${product.name}” (${product.sku}) đã ngừng sử dụng. Cần kiểm tra trước khi nhập.`,
+      matchedProductId: product.id,
+      effectiveSku: product.sku,
+    };
+  }
   return {
     ...base,
     status: 'MATCHED',
